@@ -1162,9 +1162,18 @@ function resolveAtBat(event,rbi){
     abResult.className='atbat-result show '+(got?'correct':'wrong');
     abResult.textContent=(got?'\u2705 ':'\u274C ')+ev+(got?' \u2014 +'+uPts+' pts!':' \u2014 +0');
     if(got){playSound(ev==='Home Run'?'homer':'correct');if(ev==='Home Run')triggerConfetti()}else{playSound('wrong');triggerShake()}
-    setTimeout(()=>{abResult.classList.remove('show')},5000);
   }
   mpSendScore();
+  // Auto-reset at-bat card after 6 seconds so you can pick for the next batter
+  setTimeout(()=>{
+    abResult.classList.remove('show');
+    S.atBatPick='';S.atBatCPU='';S.atBatRbiPick=false;
+    atBatLocked=false;resetAtBatState();
+    $('atbatCard').classList.remove('locked');$('atbatLockedMsg').textContent='';
+    document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
+    $('rbiRowAB').style.display=S.runnersOn>0?'flex':'none';$('rbiToggleAB').classList.remove('on');
+    document.querySelector('.atbat-card-header span').textContent='\uD83C\uDFAF Predict the At-Bat';
+  },6000);
 }
 
 /* ══════════════════════════════════════
