@@ -710,6 +710,7 @@ function startGame(gameId,away,home,awayId,homeId){
   document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
   $('hitSub').classList.remove('open');$('pitchOddsLabel').textContent='';
   $('inningBreak').classList.remove('show');$('matchupBar').style.display='';
+  resetAtBatState();atBatLocked=false;
 
   if(S.isMultiplayer){$('soloScores').style.display='none';$('mpScores').style.display='';mpSendScore()}
   else{$('soloScores').style.display='';$('mpScores').style.display='none'}
@@ -851,13 +852,24 @@ function applyDelayedFeed(d){
     if(cp.matchup.batter&&cp.matchup.batter.id)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+cp.matchup.batter.id+'/headshot/67/current';
     const batterId=cp.matchup.batter?cp.matchup.batter.id:0;
     if(batterId&&batterId!==S.lastBatterId){
-      S.lastBatterId=batterId;S.atBatPick='';S.atBatCPU='';S.atBatResolved=false;S.atBatRbiPick=false;
+      const hadPrePick=S.atBatPick;// preserve pre-pick from break
+      S.lastBatterId=batterId;S.atBatCPU='';S.atBatResolved=false;
       S.currentCount={balls:0,strikes:0};
-      $('atbatCard').classList.remove('locked');$('atbatLockedMsg').textContent='';
-      document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
-      $('rbiRowAB').style.display=S.runnersOn>0?'flex':'none';$('rbiToggleAB').classList.remove('on');
+      resetAtBatState();
+      if(!hadPrePick){
+        // No pre-pick — fresh at-bat card
+        S.atBatPick='';S.atBatRbiPick=false;
+        $('atbatCard').classList.remove('locked');$('atbatLockedMsg').textContent='';
+        document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
+        $('rbiToggleAB').classList.remove('on');
+      }else{
+        // Had a pre-pick from break — start 5 sec countdown to lock
+        startAtBatLockCountdown();
+      }
+      $('rbiRowAB').style.display=S.runnersOn>0?'flex':'none';
       clearZone();renderCountDots(0,0,S.currentOuts);
       updateDynamicOdds(0,0);
+      document.querySelector('.atbat-card-header span').textContent='\uD83C\uDFAF Predict the At-Bat';
       $('statusBar').textContent='\uD83C\uDFAF New batter \u2014 make your call!';$('statusBar').className='status-bar';
     }
   }
@@ -1051,7 +1063,7 @@ function resetAtBatState(){
 
 const AB_SCORES={Strikeout:25,Walk:30,Groundout:20,Flyout:20,Single:50,Double:100,Triple:200,'Home Run':250};
 function resolveAtBat(event,rbi){
-  S.atBatResolved=true;
+  S.atBatResolved=true;resetAtBatState();
   let ev=event;
   if(ev.includes('Strikeout')||ev.includes('Strikes out'))ev='Strikeout';
   else if(ev.includes('Walk'))ev='Walk';
