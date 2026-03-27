@@ -1775,11 +1775,28 @@ function saveLB(){
   S.leaderboard.sort((a,b)=>b.s-a.s);if(S.leaderboard.length>10)S.leaderboard.length=10;
   localStorage.setItem('dg_lb',JSON.stringify(S.leaderboard));
 }
-function renderHomeLB(){
-  const el=$('homeLB');if(!S.leaderboard.length){el.innerHTML='<h3>\uD83C\uDFC6 Leaderboard</h3><div style="color:#64748b;font-size:13px">Play a game to get on the board!</div>';return}
-  let h='<h3>\uD83C\uDFC6 Leaderboard</h3>';
-  S.leaderboard.slice(0,5).forEach((e,i)=>{const m=i===0?'\uD83E\uDD47':i===1?'\uD83E\uDD48':i===2?'\uD83E\uDD49':'';h+='<div class="lb-row"><span class="rank">'+(m||(i+1)+'.')+'</span><span class="name">'+e.n+'</span><span class="pts">'+e.s+'</span></div>'});
-  el.innerHTML=h;
+async function renderHomeLB(){
+  const el=$('homeLB');
+  el.innerHTML='<h3>\uD83C\uDFC6 Global Leaderboard</h3><div style="color:#64748b;font-size:12px">Loading...</div>';
+  try{
+    const snap=await db.ref('users').orderByChild('balance').limitToLast(10).once('value');
+    const users=[];
+    snap.forEach(child=>{const d=child.val();if(d&&d.name&&d.balance>0)users.push({name:d.name,score:d.balance,uid:child.key})});
+    users.sort((a,b)=>b.score-a.score);
+    if(!users.length){el.innerHTML='<h3>\uD83C\uDFC6 Global Leaderboard</h3><div style="color:#64748b;font-size:13px">Play a game to get on the board!</div>';return}
+    let h='<h3>\uD83C\uDFC6 Global Leaderboard</h3>';
+    users.forEach((e,i)=>{
+      const m=i===0?'\uD83E\uDD47':i===1?'\uD83E\uDD48':i===2?'\uD83E\uDD49':'';
+      const isMe=currentUser&&e.uid===currentUser.uid;
+      h+='<div class="lb-row"'+(isMe?' style="color:var(--accent2);font-weight:700"':'')+'><span class="rank">'+(m||(i+1)+'.')+'</span><span class="name">'+e.name+(isMe?' (You)':'')+'</span><span class="pts">'+e.score.toLocaleString()+'</span></div>';
+    });
+    el.innerHTML=h;
+  }catch(e){
+    // Fallback to local
+    el.innerHTML='<h3>\uD83C\uDFC6 Leaderboard</h3>';
+    if(!S.leaderboard.length){el.innerHTML+='<div style="color:#64748b;font-size:13px">Play a game to get on the board!</div>';return}
+    S.leaderboard.slice(0,5).forEach((e,i)=>{const m=i===0?'\uD83E\uDD47':i===1?'\uD83E\uDD48':i===2?'\uD83E\uDD49':'';el.innerHTML+='<div class="lb-row"><span class="rank">'+(m||(i+1)+'.')+'</span><span class="name">'+e.n+'</span><span class="pts">'+e.s+'</span></div>'});
+  }
 }
 function ordinal(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0])}
 
