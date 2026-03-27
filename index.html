@@ -53,6 +53,13 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .home-actions button:active{transform:scale(0.97)}
 .btn-solo{background:linear-gradient(135deg,#10b981,#059669);color:#fff}
 .btn-friends{background:linear-gradient(135deg,#f59e0b,#d97706);color:#000}
+.btn-practice{background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff}
+.practice-badge{display:none;font-size:10px;font-weight:700;color:#a5b4fc;background:rgba(99,102,241,0.2);padding:3px 10px;border-radius:6px;text-align:center;text-transform:uppercase;letter-spacing:1px}
+.practice-badge.show{display:block}
+.practice-speed{display:none;align-items:center;gap:6px;background:var(--card);border-radius:var(--radius);padding:6px 12px;font-size:11px;color:var(--muted)}
+.practice-speed.show{display:flex}
+.practice-speed button{border:none;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--muted)}
+.practice-speed button.active{background:#6366f1;color:#fff}
 .game-list{display:flex;flex-direction:column;gap:6px}
 .game-list-header{display:flex;justify-content:space-between;align-items:center;padding:4px 0}
 .game-list-header h2{font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
@@ -352,6 +359,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     <button class="btn-solo" id="btnSoloMode">Solo vs CPU</button>
     <button class="btn-friends" id="btnFriendsMode">Play with Friends</button>
   </div>
+  <button class="auth-btn btn-practice" id="btnPractice" style="width:100%;margin:-4px 0 4px">&#127891; Practice Mode — Learn How to Play</button>
   <div class="game-list">
     <div class="game-list-header"><h2>Today's Games</h2><button class="refresh-btn" id="refreshGames">Refresh</button></div>
     <div id="gamesList"></div>
@@ -388,6 +396,8 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     </div>
   </div>
   <div class="game-time" id="gameTime"></div>
+  <div class="practice-badge" id="practiceBadge">&#127891; Practice Mode — Simulated Game</div>
+  <div class="practice-speed" id="practiceSpeed">&#9654; Speed: <button class="active" data-spd="5000">Normal</button><button data-spd="2500">Fast</button><button data-spd="1000">Turbo</button></div>
 
   <!-- Solo scores -->
   <div class="scores-row" id="soloScores">
@@ -1577,6 +1587,180 @@ function showEndGame(){
   $('endgameOverlay').classList.add('show');
   playSound('homer');
 }
+
+/* ══════════════════════════════════════
+   PRACTICE MODE — Simulated replay
+   ══════════════════════════════════════ */
+let practiceMode=false,practicePitches=[],practiceIdx=0,practiceTimer=null,practiceSpeed=5000;
+let practiceGameData=null;
+
+$('btnPractice').addEventListener('click',startPractice);
+
+// Speed buttons
+document.querySelectorAll('.practice-speed button').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.practice-speed button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    practiceSpeed=parseInt(btn.dataset.spd);
+    // Restart timer with new speed
+    if(practiceTimer){clearTimeout(practiceTimer);practiceTimer=setTimeout(practiceNextPitch,practiceSpeed)}
+  });
+});
+
+async function startPractice(){
+  $('btnPractice').textContent='Loading game...';
+  try{
+    // Find yesterday's games to get a completed one
+    const d=new Date();d.setDate(d.getDate()-1);
+    const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const r=await fetch('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+ds+'&hydrate=linescore');
+    const sched=await r.json();
+    const games=(sched.dates&&sched.dates[0]&&sched.dates[0].games)||[];
+    const final=games.filter(g=>g.status.abstractGameState==='Final');
+    if(!final.length){$('btnPractice').textContent='No completed games found — try again';return}
+    // Pick a random completed game
+    const game=final[Math.floor(Math.random()*final.length)];
+    const gamePk=game.gamePk;
+    const away=game.teams.away.team.name,home=game.teams.home.team.name;
+    const awayId=game.teams.away.team.id,homeId=game.teams.home.team.id;
+
+    // Fetch the full play-by-play
+    const r2=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+gamePk+'/feed/live');
+    const gd=await r2.json();
+    practiceGameData=gd;
+
+    // Extract ALL pitches from all plays in order
+    practicePitches=[];practiceIdx=0;
+    const allPlays=gd.liveData.plays.allPlays||[];
+    for(let p=0;p<allPlays.length;p++){
+      const play=allPlays[p];
+      const events=play.playEvents||[];
+      const batter=play.matchup&&play.matchup.batter?play.matchup.batter:{};
+      const pitcher=play.matchup&&play.matchup.pitcher?play.matchup.pitcher:{};
+      const inning=play.about?play.about.inning:0;
+      const half=play.about?play.about.halfInning:'';
+      const isComplete=play.about?play.about.isComplete:false;
+      const playResult=play.result?play.result.event:'';
+      const playRbi=play.result?play.result.rbi||0:0;
+
+      for(let e=0;e<events.length;e++){
+        const ev=events[e];
+        if(!ev.isPitch)continue;
+        practicePitches.push({
+          pitchNum:ev.pitchNumber,
+          desc:ev.details?ev.details.description:'?',
+          callCode:ev.details&&ev.details.call?ev.details.call.code:'',
+          typeCode:ev.details&&ev.details.type?ev.details.type.code:'',
+          typeDesc:ev.details&&ev.details.type?ev.details.type.description:'',
+          pX:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pX:null,
+          pZ:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pZ:null,
+          szTop:ev.pitchData?ev.pitchData.strikeZoneTop||3.5:3.5,
+          szBot:ev.pitchData?ev.pitchData.strikeZoneBottom||1.5:1.5,
+          speed:ev.pitchData?ev.pitchData.startSpeed:null,
+          count:ev.count?ev.count.balls+'-'+ev.count.strikes:'',
+          countBalls:ev.count?ev.count.balls:0,
+          countStrikes:ev.count?ev.count.strikes:0,
+          countOuts:ev.count?ev.count.outs:0,
+          playResult:playResult,playRbi:playRbi,
+          // At-bat context
+          batterName:batter.fullName||'',batterId:batter.id||0,
+          pitcherName:pitcher.fullName||'',pitcherId:pitcher.id||0,
+          inning:inning,half:half,
+          isLastPitchOfAB:e===events.length-1&&isComplete,
+          abResult:isComplete?playResult:'',abRbi:playRbi
+        });
+      }
+    }
+
+    if(!practicePitches.length){$('btnPractice').textContent='No pitch data found';return}
+
+    // Start the practice game
+    practiceMode=true;
+    S.isMultiplayer=false;S.isHost=false;
+    startGame(gamePk,away,home,awayId,homeId);
+    // Override: disable live fetch, enable practice UI
+    clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
+    S.gameActive=true;
+    $('practiceBadge').classList.add('show');
+    $('practiceSpeed').classList.add('show');
+    // Hide the delay bar in practice mode
+    document.querySelector('.delay-bar').style.display='none';
+    $('gameTime').textContent='\uD83C\uDFAC Replay: '+away+' vs '+home+' ('+ds+')';
+    $('statusBar').textContent='\uD83C\uDFAF Practice! Make your prediction...';
+    setPred(true);
+    // Start feeding pitches
+    practiceTimer=setTimeout(practiceNextPitch,practiceSpeed);
+  }catch(e){
+    $('btnPractice').textContent='Error loading — try again';
+    console.error(e);
+  }
+  $('btnPractice').textContent='\uD83C\uDF93 Practice Mode \u2014 Learn How to Play';
+}
+
+function practiceNextPitch(){
+  if(!S.gameActive||!practiceMode||practiceIdx>=practicePitches.length){
+    if(practiceIdx>=practicePitches.length){
+      // Game over
+      S.gameActive=false;if(S.userScore>0)saveLB();
+      setTimeout(showEndGame,1500);
+    }
+    return;
+  }
+  const p=practicePitches[practiceIdx];
+
+  // Update matchup display
+  if(p.batterId!==S.lastBatterId&&p.batterId){
+    S.lastBatterId=p.batterId;
+    $('pitcherName').textContent=p.pitcherName||'\u2014';
+    $('batterName').textContent=p.batterName||'\u2014';
+    if(p.pitcherId)$('pitcherImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+p.pitcherId+'/headshot/67/current';
+    if(p.batterId)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+p.batterId+'/headshot/67/current';
+    abReset();clearZone();
+    $('statusBar').textContent='\uD83C\uDFAF '+p.batterName+' is up \u2014 make your call!';$('statusBar').className='status-bar';
+  }
+
+  // Update inning
+  const arrow=p.half==='top'?'\u25B2':'\u25BC';
+  $('inningBadge').textContent=arrow+' '+ordinal(p.inning);
+  S.currentInning=p.inning;
+
+  // Update count
+  renderCountDots(p.countBalls,p.countStrikes,p.countOuts);
+  S.currentCount={balls:p.countBalls,strikes:p.countStrikes};
+  S.currentOuts=p.countOuts;
+  updateDynamicOdds(p.countBalls,p.countStrikes);
+  updateSitBadges();
+
+  // If user has a pitch pick, lock it now
+  if(S.userPick&&!pitchLocked)lockPitchPick();
+
+  // Resolve the pitch
+  resolvePitch(p);
+
+  // If this was the last pitch of an at-bat, resolve it
+  if(p.isLastPitchOfAB&&p.abResult){
+    resolveAtBat(p.abResult,p.abRbi);
+  }
+
+  practiceIdx++;
+
+  // Schedule next pitch
+  if(practiceIdx<practicePitches.length){
+    $('statusBar').textContent='\uD83C\uDFAF Pitch '+(practiceIdx+1)+' of '+practicePitches.length+' \u2014 make your call!';
+    setPred(true);resetPitchState();
+    practiceTimer=setTimeout(practiceNextPitch,practiceSpeed);
+  }
+}
+
+// Override back button to handle practice mode cleanup
+const origBackHandler=$('backBtn').onclick;
+$('backBtn').addEventListener('click',()=>{
+  if(practiceMode){
+    practiceMode=false;if(practiceTimer)clearTimeout(practiceTimer);
+    $('practiceBadge').classList.remove('show');$('practiceSpeed').classList.remove('show');
+    document.querySelector('.delay-bar').style.display='';
+  }
+});
 
 /* ══════════════════════════════════════
    DYNAMIC BACKGROUND
