@@ -1600,6 +1600,8 @@ function resetPitchState(){
   document.querySelectorAll('.pred-btn').forEach(b=>{b.classList.remove('sel');b.classList.remove('locked');b.style.opacity=''});
   // Unlock pitch type buttons
   document.querySelectorAll('.ptype-btn').forEach(b=>{b.style.pointerEvents='';b.style.opacity=''});
+  // Clear CPU picks so indicators reset
+  S.cpuPick='';S.pitchTypeCPU='';
   // Reset ready indicators
   const yr=$('youReady'),cr=$('cpuReady');
   if(yr){yr.textContent='⏳';yr.className='sc-ready waiting'}
@@ -2120,11 +2122,15 @@ function updateReadyIndicators(){
     el.textContent=youReady?'✅':'⏳';
     el.className='sc-ready '+(youReady?'done':'waiting');
   }
-  // CPU is always ready in solo (picks instantly)
+  // CPU ready: checkmark when CPU has both picks locked
   const cpuEl=$('cpuReady');
   if(cpuEl&&!S.isMultiplayer){
-    cpuEl.textContent=youReady?'✅':'⏳';
-    cpuEl.className='sc-ready '+(youReady?'done':'waiting');
+    const cpuHasPitch=!!S.cpuPick;
+    const cpuHasAB=!!S.atBatCPU;
+    const cpuReady=cpuHasPitch&&cpuHasAB;
+    const cpuPartial=cpuHasPitch||cpuHasAB;
+    cpuEl.textContent=cpuReady?'✅':cpuPartial?'🟡':'⏳';
+    cpuEl.className='sc-ready '+(cpuReady?'done':'waiting');
   }
   // Waiting message
   const wm=$('waitingMsg');
@@ -2135,6 +2141,7 @@ function updateReadyIndicators(){
       if(needPitch&&needAB)msg='Pick at-bat + pitch call to continue';
       else if(needAB)msg='Pitch locked ✅ — now pick at-bat outcome';
       else msg='At-bat locked ✅ — now pick pitch call';
+      if(S.cpuPick)msg+=' — CPU is ready ✅';
       if(autoPickCountdown>0)msg+=' (auto-skip in '+autoPickCountdown+'s)';
       wm.textContent=msg;
       wm.style.display='';
@@ -2157,7 +2164,7 @@ function practiceAutoCheck(){
     $('statusBar').textContent='\u2705 Both picks locked — here it comes!';$('statusBar').className='status-bar correct';
     $('waitingMsg').style.display='none';
     practiceWaiting=false;
-    practiceTimer=setTimeout(practiceNextPitch,1500);
+    practiceTimer=setTimeout(practiceNextPitch,300);
   }else if(hasPitch||hasAB){
     $('statusBar').textContent='\uD83C\uDFAF '+(hasPitch?'Pitch locked — pick at-bat to continue':'At-bat locked — pick pitch to continue');$('statusBar').className='status-bar';
   }else{
