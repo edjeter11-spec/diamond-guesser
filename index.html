@@ -195,6 +195,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .pred-btn{border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:transform .1s;min-height:42px;position:relative;overflow:hidden;padding:5px 2px}
 .pred-btn .pts{font-size:9px;font-weight:600;opacity:0.7}
 .pred-btn:active:not(:disabled){transform:scale(0.94)}.pred-btn:disabled{opacity:0.25;cursor:default}
+.pred-btn.sel{outline:3px solid var(--accent);outline-offset:-1px;box-shadow:0 0 10px rgba(245,158,11,0.4)}
 .pred-btn.ball{background:linear-gradient(135deg,#166534,#15803d);color:#4ade80}
 .pred-btn.strike{background:linear-gradient(135deg,#7f1d1d,#991b1b);color:#fca5a5}
 .pred-btn.foul{background:linear-gradient(135deg,#713f12,#854d0e);color:#fcd34d}
@@ -760,7 +761,8 @@ function extractPitches(d){
       count:ev.count?ev.count.balls+'-'+ev.count.strikes:'',
       countBalls:ev.count?ev.count.balls:0,countStrikes:ev.count?ev.count.strikes:0,countOuts:ev.count?ev.count.outs:0,
       playResult:pr,playRbi:rbi});
-    if(!S.userPick)$('statusBar').textContent='\uD83D\uDCE1 Pitch incoming \u2014 make your call!';
+    if(S.userPick&&!pitchLocked)startPitchLockCountdown();
+    else if(!S.userPick)$('statusBar').textContent='\uD83D\uDCE1 Pitch incoming \u2014 make your call!';
   }
 }
 
@@ -820,8 +822,8 @@ function applyDelayedFeed(d){
     $('ibBatters').innerHTML=battersHTML;
     $('inningBreak').classList.add('show');
     $('matchupBar').style.display='none';
-    // Keep pitch predictions disabled during break but allow at-bat predictions
-    setPred(false);
+    // Keep predictions enabled during break — editable until locked
+    if(!pitchLocked)setPred(true);
     // Pre-load the due-up batter into the at-bat card so you can predict early
     if(dueUp.length&&dueUp[0].fullName){
       const nextBatter=dueUp[0].fullName;
@@ -985,34 +987,64 @@ $('delaySlider').addEventListener('input',e=>{$('delayVal').textContent=e.target
 /* ══════════════════════════════════════
    PITCH-BY-PITCH PREDICTIONS
    ══════════════════════════════════════ */
+let pitchLocked=false,pitchLockTimer=null;
 $('btnBall').addEventListener('click',()=>predict('Ball'));
 $('btnStrike').addEventListener('click',()=>predict('Strike'));
 $('btnFoul').addEventListener('click',()=>predict('Foul'));
 $('btnOut').addEventListener('click',()=>predict('Out'));
 $('btnHomer').addEventListener('click',()=>predict('Homer'));
-$('btnHit').addEventListener('click',()=>{if(S.userPick||!S.gameActive||S.gamePaused)return;$('hitSub').classList.add('open');S.rbiPick=false;$('rbiToggle').classList.remove('on')});
+$('btnHit').addEventListener('click',()=>{if(pitchLocked||!S.gameActive)return;$('hitSub').classList.toggle('open');S.rbiPick=false;$('rbiToggle').classList.remove('on')});
 $('btnSingle').addEventListener('click',()=>predict('Single'));
 $('btnDouble').addEventListener('click',()=>predict('Double'));
 $('btnTriple').addEventListener('click',()=>predict('Triple'));
 $('rbiToggle').addEventListener('click',()=>{S.rbiPick=!S.rbiPick;$('rbiToggle').classList.toggle('on')});
 
 document.querySelectorAll('.ptype-btn').forEach(btn=>{
-  btn.addEventListener('click',()=>{document.querySelectorAll('.ptype-btn').forEach(b=>b.classList.remove('sel'));btn.classList.add('sel');S.pitchTypePick=btn.dataset.pt});
+  btn.addEventListener('click',()=>{if(pitchLocked)return;document.querySelectorAll('.ptype-btn').forEach(b=>b.classList.remove('sel'));btn.classList.add('sel');S.pitchTypePick=btn.dataset.pt});
 });
 
 function predict(choice){
-  if(S.userPick||!S.gameActive||S.gamePaused)return;
-  S.userPick=choice;S.pitchTypePick='';$('hitSub').classList.remove('open');setPred(false);
-  $('ptypeRow').classList.add('open');document.querySelectorAll('.ptype-btn').forEach(b=>b.classList.remove('sel'));
+  if(pitchLocked||!S.gameActive)return;
+  // Allow changing pick — editable until locked
+  S.userPick=choice;$('hitSub').classList.remove('open');
+  // Highlight selected button
+  document.querySelectorAll('.pred-btn').forEach(b=>b.classList.remove('sel'));
+  const btnMap={Ball:'btnBall',Strike:'btnStrike',Foul:'btnFoul',Out:'btnOut',Homer:'btnHomer',Single:'btnHit',Double:'btnHit',Triple:'btnHit'};
+  if(btnMap[choice])$(btnMap[choice]).classList.add('sel');
+  // Show pitch type row
+  $('ptypeRow').classList.add('open');
   const lbl=choice+(S.rbiPick?' +RBI':'');
-  $('statusBar').textContent='\uD83D\uDD12 '+lbl+' \u2014 pick pitch type or wait...';$('statusBar').className='status-bar';
+  $('statusBar').textContent='\uD83C\uDFAF '+lbl+' selected \u2014 change anytime or pick pitch type';$('statusBar').className='status-bar';
+  if(navigator.vibrate)navigator.vibrate(20);
+}
+function lockPitchPick(){
+  if(!S.userPick||pitchLocked)return;
+  pitchLocked=true;
+  setPred(false);
   if(!S.isMultiplayer){
     const r=Math.random()*100;
     S.cpuPick=r<38?'Ball':r<55?'Strike':r<73?'Foul':r<83?'Out':r<90?(Math.random()<0.65?'Single':Math.random()<0.9?'Double':'Triple'):'Homer';
     S.rbiPickCPU=S.runnersOn>0&&Math.random()<0.4;
     S.pitchTypeCPU=Math.random()<0.5?'Fastball':Math.random()<0.8?'Breaking':'Offspeed';
   }
-  if(navigator.vibrate)navigator.vibrate(30);
+  const lbl=S.userPick+(S.rbiPick?' +RBI':'')+(S.pitchTypePick?' ('+S.pitchTypePick+')':'');
+  $('statusBar').textContent='\uD83D\uDD12 '+lbl+' \u2014 locked!';$('statusBar').className='status-bar';
+  playSound('correct');
+}
+function startPitchLockCountdown(){
+  if(pitchLocked||!S.userPick)return;
+  let sec=3;
+  $('statusBar').textContent='\u23F0 Pitch incoming! Locking in '+sec+'...';$('statusBar').className='status-bar';
+  if(pitchLockTimer)clearInterval(pitchLockTimer);
+  pitchLockTimer=setInterval(()=>{
+    sec--;
+    if(sec<=0){clearInterval(pitchLockTimer);pitchLockTimer=null;lockPitchPick()}
+    else{$('statusBar').textContent='\u23F0 Pitch incoming! Locking in '+sec+'...'}
+  },1000);
+}
+function resetPitchState(){
+  pitchLocked=false;if(pitchLockTimer){clearInterval(pitchLockTimer);pitchLockTimer=null}
+  document.querySelectorAll('.pred-btn').forEach(b=>b.classList.remove('sel'));
 }
 function setPred(on){
   ['btnBall','btnStrike','btnFoul','btnOut','btnHit','btnHomer'].forEach(id=>{$(id).disabled=!on});
@@ -1160,6 +1192,7 @@ function resolvePitch(p){
     setTimeout(()=>{clearZone();renderCountDots(0,0,S.currentOuts)},1500);
   }
   S.userPick='';S.cpuPick='';S.rbiPick=false;S.rbiPickCPU=false;S.pitchTypePick='';S.pitchTypeCPU='';
+  resetPitchState();
   if(!S.gamePaused)setPred(true);
   setTimeout(()=>{$('statusBar').className='status-bar';if(!S.userPick&&S.gameActive&&!S.gamePaused)$('statusBar').textContent='\uD83C\uDFAF Make your call!'},2500);
 }
