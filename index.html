@@ -9,7 +9,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0e1a">
 <title>Diamond Guesser</title>
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 :root{--bg:#0a0e1a;--card:#111827;--card2:#1a2332;--accent:#f59e0b;--accent2:#10b981;--red:#ef4444;--blue:#3b82f6;--text:#f1f5f9;--muted:#64748b;--radius:14px;--safe-top:env(safe-area-inset-top,0px);--safe-bot:env(safe-area-inset-bottom,0px)}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -17,8 +19,8 @@ html{height:100%;background:var(--bg)}
 body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;padding:calc(8px + var(--safe-top)) 8px calc(8px + var(--safe-bot));-webkit-tap-highlight-color:transparent;user-select:none;overflow-x:hidden}
 .screen{display:none;flex-direction:column;gap:8px;max-width:500px;margin:0 auto;width:100%}.screen.active{display:flex}
 
-/* ─── HOME SCREEN ─── */
-.home-hero{text-align:center;padding:28px 0 12px;position:relative}
+/* HOME */
+.home-hero{text-align:center;padding:28px 0 12px}
 .home-hero h1{font-size:32px;font-weight:900;letter-spacing:-1px;background:linear-gradient(135deg,#f59e0b 0%,#ef4444 50%,#f59e0b 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .home-hero p{color:var(--muted);font-size:13px;margin-top:2px}
 .home-actions{display:flex;gap:8px;margin:4px 0}
@@ -32,17 +34,14 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .refresh-btn{background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;font-weight:600;padding:4px 8px;border-radius:6px}
 .game-card{background:var(--card);border-radius:var(--radius);padding:12px;display:flex;align-items:center;gap:10px;cursor:pointer;border:1px solid transparent;transition:all .2s;position:relative;overflow:hidden}
 .game-card:active{border-color:var(--accent);transform:scale(0.98)}
-.game-card.live{border-left:3px solid var(--red)}
-.game-card.live .gc-status{color:var(--red)}
-.game-card.final .gc-status{color:var(--muted)}
-.game-card.preview .gc-status{color:var(--blue)}
+.game-card.live{border-left:3px solid var(--red)}.game-card.live .gc-status{color:var(--red)}
+.game-card.final .gc-status{color:var(--muted)}.game-card.preview .gc-status{color:var(--blue)}
 .gc-teams{flex:1;min-width:0}
 .gc-team{display:flex;align-items:center;gap:8px;padding:3px 0}
 .gc-logo{width:24px;height:24px;border-radius:4px;object-fit:contain;background:rgba(255,255,255,0.05);flex-shrink:0}
 .gc-team-name{font-weight:600;font-size:14px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gc-score{font-weight:800;font-size:18px;min-width:24px;text-align:right}
-.gc-meta{text-align:right;min-width:50px}
-.gc-status{font-size:11px;font-weight:700;text-transform:uppercase}
+.gc-meta{text-align:right;min-width:50px}.gc-status{font-size:11px;font-weight:700;text-transform:uppercase}
 .gc-arrow{color:var(--muted);font-size:18px}
 .section-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:10px 0 2px}
 .lb-card{background:var(--card);border-radius:var(--radius);padding:12px}
@@ -50,7 +49,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .lb-row{display:flex;justify-content:space-between;padding:3px 0;font-size:13px}
 .lb-row .rank{color:var(--muted);min-width:28px}.lb-row .name{flex:1}.lb-row .pts{font-weight:700;color:var(--accent)}
 
-/* ─── LOBBY SCREEN ─── */
+/* LOBBY */
 .lobby-header{display:flex;align-items:center;gap:8px;padding:8px 0}
 .lobby-header h2{flex:1;font-size:20px;font-weight:800}
 .lobby-options{display:flex;flex-direction:column;gap:8px}
@@ -64,8 +63,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .join-row{display:flex;gap:8px;justify-content:center;margin-bottom:8px}
 .join-input{background:var(--card2);border:2px solid #334155;border-radius:10px;padding:10px 14px;color:var(--text);font-size:20px;font-weight:800;text-align:center;width:160px;letter-spacing:6px;text-transform:uppercase;outline:none}
 .join-input:focus{border-color:var(--accent)}
-.room-display{display:none;flex-direction:column;gap:8px}
-.room-display.show{display:flex}
+.room-display{display:none;flex-direction:column;gap:8px}.room-display.show{display:flex}
 .room-code-box{background:linear-gradient(135deg,#1e3a5f,#0f3460);border-radius:var(--radius);padding:20px;text-align:center}
 .room-code-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:600}
 .room-code-val{font-size:48px;font-weight:900;letter-spacing:12px;color:var(--accent);margin:4px 0}
@@ -80,18 +78,18 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .room-game-pick{background:var(--card);border-radius:var(--radius);padding:12px}
 .room-game-pick h4{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;font-weight:700}
 
-/* ─── GAME SCREEN ─── */
+/* GAME */
 .game-top-bar{display:flex;align-items:center;gap:8px;padding:4px 0}
 .back-btn{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:4px 8px;border-radius:6px;line-height:1}
 .back-btn:active{background:rgba(255,255,255,0.05)}
 .game-header{flex:1;display:flex;align-items:center;justify-content:center;gap:8px}
 .gh-logo{width:28px;height:28px;border-radius:4px;object-fit:contain}
-.gh-score{font-size:24px;font-weight:900;min-width:30px;text-align:center}
+.gh-score{font-size:28px;font-weight:900;min-width:30px;text-align:center}
 .gh-vs{font-size:11px;color:var(--muted);font-weight:700}
 .gh-inning{font-size:11px;color:var(--accent);font-weight:700;padding:2px 8px;background:rgba(245,158,11,0.15);border-radius:6px}
 .game-time{text-align:center;font-size:11px;color:var(--muted);font-weight:600;padding:2px 0}
 
-/* Player scores */
+/* Scores */
 .scores-row{display:flex;gap:6px}
 .score-card{flex:1;background:var(--card);border-radius:var(--radius);padding:10px 8px;text-align:center;position:relative;overflow:hidden}
 .score-card .sc-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px}
@@ -99,7 +97,6 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .score-card.you .sc-val{color:var(--accent2)}
 .score-card.cpu .sc-val{color:var(--blue)}
 .score-card.streak .sc-val{color:var(--accent);font-size:22px}
-/* Multiplayer scores */
 .mp-scores{background:var(--card);border-radius:var(--radius);padding:8px 10px}
 .mp-scores h4{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:4px}
 .mp-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:13px}
@@ -122,31 +119,39 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .count-display{font-size:12px;color:var(--muted);margin-top:2px}
 .count-display span{font-weight:700;color:var(--text)}
 
-/* At-bat prediction */
-.atbat-bar{background:var(--card);border-radius:var(--radius);padding:8px 10px;cursor:pointer}
-.atbat-header{display:flex;justify-content:space-between;align-items:center}
-.atbat-header span{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px}
-.atbat-toggle{font-size:14px;color:var(--muted);transition:transform .2s}
-.atbat-bar.open .atbat-toggle{transform:rotate(180deg)}
-.atbat-picks{display:none;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-top:6px}
-.atbat-bar.open .atbat-picks{display:grid}
-.ab-btn{border:none;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;padding:5px 2px;text-align:center;background:var(--card2);color:var(--text);transition:transform .1s}
-.ab-btn:active{transform:scale(0.95)}.ab-btn:disabled{opacity:0.3}
-.ab-btn .ab-pts{display:block;font-size:8px;color:var(--muted)}
-.atbat-locked{display:none;font-size:11px;color:var(--accent);font-weight:600;margin-top:4px;text-align:center}
-.atbat-bar.locked .atbat-picks{display:none}.atbat-bar.locked .atbat-locked{display:block}
+/* AT-BAT PRIMARY — big prominent card */
+.atbat-card{background:linear-gradient(135deg,#1e293b,#0f172a);border-radius:var(--radius);padding:12px;border:2px solid #334155;position:relative}
+.atbat-card.locked{border-color:var(--accent);opacity:0.8}
+.atbat-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.atbat-card-header span{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--accent)}
+.atbat-card-header .atbat-pts-label{font-size:10px;color:var(--muted);font-weight:600}
+.atbat-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px}
+.ab-btn{border:none;border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;padding:10px 4px;text-align:center;color:var(--text);transition:all .15s;position:relative}
+.ab-btn:active:not(:disabled){transform:scale(0.94)}.ab-btn:disabled{opacity:0.2;cursor:default}
+.ab-btn .ab-emoji{font-size:18px;display:block;margin-bottom:2px}
+.ab-btn .ab-pts{display:block;font-size:9px;color:rgba(255,255,255,0.5);margin-top:1px}
+.ab-btn.k{background:linear-gradient(135deg,#7f1d1d,#991b1b)}.ab-btn.bb{background:linear-gradient(135deg,#166534,#15803d)}
+.ab-btn.go{background:linear-gradient(135deg,#1e3a5f,#1e40af)}.ab-btn.fo{background:linear-gradient(135deg,#1e3a5f,#1e40af)}
+.ab-btn.s1{background:linear-gradient(135deg,#4c1d95,#5b21b6)}.ab-btn.s2{background:linear-gradient(135deg,#5b21b6,#6d28d9)}
+.ab-btn.s3{background:linear-gradient(135deg,#6d28d9,#7c3aed)}.ab-btn.hr{background:linear-gradient(135deg,#9f1239,#be123c)}
+.ab-btn.sel{outline:3px solid var(--accent);outline-offset:-1px;box-shadow:0 0 12px rgba(245,158,11,0.4)}
+.atbat-locked-msg{display:none;text-align:center;padding:8px;font-size:14px;font-weight:700;color:var(--accent)}
+.atbat-card.locked .atbat-grid{display:none}.atbat-card.locked .atbat-locked-msg{display:block}
+.rbi-row{display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 0 2px}
+.rbi-toggle{width:36px;height:20px;border-radius:10px;background:#334155;border:none;cursor:pointer;position:relative;transition:background .2s}
+.rbi-toggle.on{background:var(--accent)}.rbi-toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}.rbi-toggle.on::after{left:18px}
+.rbi-label{font-size:11px;color:var(--muted);font-weight:600}
 
 /* Situation badges */
 .sit-badges{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;min-height:0}
-.sit-badge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:#78350f;color:var(--accent)}
+.sit-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;background:#78350f;color:var(--accent)}
 .sit-badge.clutch{background:#7f1d1d;color:#fca5a5;animation:pulse 1.5s infinite}
 
-/* ESPN-style pitch tracker + base diamond row */
+/* ESPN pitch tracker + diamond */
 .tracker-row{display:flex;gap:8px;align-items:stretch}
 .zone-wrap{flex:1;min-width:0}
 .zone-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;text-align:center}
 .strike-zone-svg{width:100%;background:var(--card);border-radius:var(--radius);overflow:hidden;display:block}
-/* Count indicator row */
 .count-row{display:flex;justify-content:center;gap:16px;padding:6px 0;background:var(--card);border-radius:var(--radius) var(--radius) 0 0;margin-bottom:-2px}
 .count-group{display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.5px}
 .count-group span{display:flex;gap:3px;margin-left:4px}
@@ -154,27 +159,17 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .count-dot.filled-ball{background:#4ade80;border-color:#4ade80}
 .count-dot.filled-strike{background:#ef4444;border-color:#ef4444}
 .count-dot.filled-out{background:#f59e0b;border-color:#f59e0b}
-/* Base diamond */
 .diamond-wrap{flex:0 0 110px;display:flex;flex-direction:column;align-items:center;gap:4px}
 .diamond-svg{width:100px;height:100px}
 .on-base-text{font-size:9px;color:var(--muted);text-align:center;line-height:1.4}
 .on-base-text span{color:var(--accent);font-weight:700}
-/* Modal overlay */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;justify-content:center;align-items:center;padding:16px}
-.modal-overlay.show{display:flex}
-.modal-box{background:var(--card);border-radius:var(--radius);padding:20px;max-width:340px;width:100%;text-align:center}
-.modal-box h3{font-size:18px;font-weight:800;margin-bottom:4px}
-.modal-box p{font-size:12px;color:var(--muted);margin-bottom:14px}
-.modal-btns{display:flex;flex-direction:column;gap:8px}
-.modal-btns button{border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;transition:transform .1s}
-.modal-btns button:active{transform:scale(0.96)}
-.modal-cancel{background:var(--card2);color:var(--muted)}
 
-/* Prediction buttons */
-.pred-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;text-align:center}
-.runners-display{font-size:10px;color:var(--accent);text-align:center;min-height:14px;font-weight:600}
-.pred-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
-.pred-btn{border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:transform .1s;min-height:48px;position:relative;overflow:hidden;padding:6px 2px}
+/* Pitch-by-pitch secondary */
+.pitch-section{background:var(--card);border-radius:var(--radius);padding:10px}
+.pitch-section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.pitch-section-header span{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px}
+.pred-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
+.pred-btn{border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:transform .1s;min-height:42px;position:relative;overflow:hidden;padding:5px 2px}
 .pred-btn .pts{font-size:9px;font-weight:600;opacity:0.7}
 .pred-btn:active:not(:disabled){transform:scale(0.94)}.pred-btn:disabled{opacity:0.25;cursor:default}
 .pred-btn.ball{background:linear-gradient(135deg,#166534,#15803d);color:#4ade80}
@@ -183,27 +178,23 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .pred-btn.out{background:linear-gradient(135deg,#1e3a5f,#1e40af);color:#93c5fd}
 .pred-btn.hit{background:linear-gradient(135deg,#4c1d95,#5b21b6);color:#c4b5fd}
 .pred-btn.homer{background:linear-gradient(135deg,#9f1239,#be123c);color:#fda4af}
-
 /* Hit sub-menu */
 .hit-sub{display:none;background:rgba(10,14,26,0.97);border-radius:var(--radius);flex-direction:column;gap:6px;padding:8px;border:1px solid #334155}
 .hit-sub.open{display:flex}
-.hit-sub-btn{border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;padding:10px 8px;display:flex;align-items:center;justify-content:center;gap:6px;transition:transform .1s}
+.hit-sub-row{display:flex;gap:6px}
+.hit-sub-btn{flex:1;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;padding:10px 8px;display:flex;align-items:center;justify-content:center;gap:6px;transition:transform .1s}
 .hit-sub-btn:active{transform:scale(0.96)}
 .hit-sub-btn.single{background:#4c1d95;color:#c4b5fd}
 .hit-sub-btn.double{background:#5b21b6;color:#ddd6fe}
 .hit-sub-btn.triple{background:#6d28d9;color:#ede9fe}
 .hit-sub-btn .pts{font-size:10px;opacity:0.7}
-.rbi-row{display:flex;align-items:center;justify-content:center;gap:6px;padding:2px 0}
-.rbi-toggle{width:36px;height:20px;border-radius:10px;background:#334155;border:none;cursor:pointer;position:relative;transition:background .2s}
-.rbi-toggle.on{background:var(--accent)}.rbi-toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}.rbi-toggle.on::after{left:18px}
-.rbi-label{font-size:10px;color:var(--muted);font-weight:600}
 
 /* Pitch type */
 .ptype-row{display:none;gap:4px}.ptype-row.open{display:flex}
 .ptype-btn{flex:1;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;padding:6px 2px;text-align:center;background:var(--card2);color:var(--muted);transition:transform .1s}
 .ptype-btn:active{transform:scale(0.95)}.ptype-btn.sel{outline:2px solid var(--accent);color:var(--text)}
 
-/* Status bar */
+/* Status */
 .status-bar{background:var(--card);border-radius:var(--radius);padding:10px 12px;text-align:center;font-weight:600;font-size:14px;transition:background .3s,color .3s;min-height:42px;display:flex;align-items:center;justify-content:center}
 .status-bar.correct{background:#166534;color:#4ade80}
 .status-bar.wrong{background:#7f1d1d;color:#fca5a5}
@@ -215,7 +206,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .delay-bar input[type=range]{flex:1;accent-color:var(--accent);height:20px}
 .delay-bar .delay-val{font-size:13px;font-weight:700;min-width:40px;text-align:center;color:var(--accent)}
 
-/* Tabs for history/scoring */
+/* Tabs */
 .tab-bar{display:flex;gap:0;background:var(--card);border-radius:var(--radius) var(--radius) 0 0;overflow:hidden}
 .tab-btn{flex:1;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:700;padding:8px;cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid transparent;transition:all .2s}
 .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);background:rgba(245,158,11,0.05)}
@@ -236,16 +227,24 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .skeleton{background:linear-gradient(90deg,var(--card) 25%,var(--card2) 50%,var(--card) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:var(--radius);height:60px}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;justify-content:center;align-items:center;padding:16px}
+.modal-overlay.show{display:flex}
+.modal-box{background:var(--card);border-radius:var(--radius);padding:20px;max-width:340px;width:100%;text-align:center}
+.modal-box h3{font-size:18px;font-weight:800;margin-bottom:4px}
+.modal-box p{font-size:12px;color:var(--muted);margin-bottom:14px}
+.modal-btns{display:flex;flex-direction:column;gap:8px}
+.modal-btns button{border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;transition:transform .1s}
+.modal-btns button:active{transform:scale(0.96)}
+.modal-cancel{background:var(--card2);color:var(--muted)}
 </style>
 </head>
 <body>
 
-<!-- ═══ HOME ═══ -->
+<!-- HOME -->
 <div class="screen active" id="screenHome">
-  <div class="home-hero">
-    <h1>Diamond Guesser</h1>
-    <p>Predict the pitch before it hits the TV</p>
-  </div>
+  <div class="home-hero"><h1>Diamond Guesser</h1><p>Predict the pitch before it hits the TV</p></div>
   <div class="home-actions">
     <button class="btn-solo" id="btnSoloMode">Solo vs CPU</button>
     <button class="btn-friends" id="btnFriendsMode">Play with Friends</button>
@@ -257,48 +256,22 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   <div class="lb-card" id="homeLB"></div>
 </div>
 
-<!-- ═══ LOBBY ═══ -->
+<!-- LOBBY -->
 <div class="screen" id="screenLobby">
-  <div class="lobby-header">
-    <button class="back-btn" id="lobbyBackBtn">&#8592;</button>
-    <h2>Play with Friends</h2>
-  </div>
-  <!-- Before room is created/joined -->
+  <div class="lobby-header"><button class="back-btn" id="lobbyBackBtn">&#8592;</button><h2>Play with Friends</h2></div>
   <div id="lobbyOptions" class="lobby-options">
-    <div class="lobby-card">
-      <h3>Create a Room</h3>
-      <p>Host a game and invite friends</p>
-      <button class="btn-create" id="createRoomBtn">Create Room</button>
-    </div>
-    <div class="lobby-card">
-      <h3>Join a Room</h3>
-      <p>Enter your friend's room code</p>
-      <div class="join-row">
-        <input class="join-input" id="joinCodeInput" maxlength="4" placeholder="CODE" inputmode="text" autocapitalize="characters" autocomplete="off">
-      </div>
-      <button class="btn-join" id="joinRoomBtn">Join</button>
-    </div>
+    <div class="lobby-card"><h3>Create a Room</h3><p>Host a game and invite friends</p><button class="btn-create" id="createRoomBtn">Create Room</button></div>
+    <div class="lobby-card"><h3>Join a Room</h3><p>Enter your friend's room code</p><div class="join-row"><input class="join-input" id="joinCodeInput" maxlength="4" placeholder="CODE" inputmode="text" autocapitalize="characters" autocomplete="off"></div><button class="btn-join" id="joinRoomBtn">Join</button></div>
   </div>
-  <!-- After room is active -->
   <div class="room-display" id="roomDisplay">
-    <div class="room-code-box">
-      <div class="room-code-label">Room Code</div>
-      <div class="room-code-val" id="roomCodeVal">----</div>
-      <div class="room-code-share">Share this code with friends</div>
-    </div>
-    <div class="room-players">
-      <h4>Players</h4>
-      <div class="rp-list" id="rpList"></div>
-    </div>
+    <div class="room-code-box"><div class="room-code-label">Room Code</div><div class="room-code-val" id="roomCodeVal">----</div><div class="room-code-share">Share this code with friends</div></div>
+    <div class="room-players"><h4>Players</h4><div class="rp-list" id="rpList"></div></div>
     <div class="room-status" id="roomStatus">Waiting for players...</div>
-    <div class="room-game-pick" id="roomGamePick">
-      <h4>Pick a Game</h4>
-      <div id="roomGamesList"></div>
-    </div>
+    <div class="room-game-pick" id="roomGamePick"><h4>Pick a Game</h4><div id="roomGamesList"></div></div>
   </div>
 </div>
 
-<!-- ═══ GAME ═══ -->
+<!-- GAME -->
 <div class="screen" id="screenGame">
   <div class="game-top-bar">
     <button class="back-btn" id="backBtn">&#8592;</button>
@@ -320,10 +293,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     <div class="score-card cpu"><div class="sc-label">CPU</div><div class="sc-val" id="cpuScore">0</div></div>
   </div>
   <!-- Multiplayer scores -->
-  <div class="mp-scores" id="mpScores" style="display:none">
-    <h4>Leaderboard</h4>
-    <div id="mpScoresList"></div>
-  </div>
+  <div class="mp-scores" id="mpScores" style="display:none"><h4>Leaderboard</h4><div id="mpScoresList"></div></div>
 
   <div class="halftime-alert" id="halftimeAlert"><h3 id="htTitle"></h3><p id="htBody"></p></div>
   <div class="matchup-bar">
@@ -337,107 +307,118 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     <img class="matchup-img" id="batterImg" src="" alt="">
   </div>
 
-  <!-- At-bat prediction -->
-  <div class="atbat-bar" id="atbatBar">
-    <div class="atbat-header" id="atbatHeader"><span>&#127919; Predict At-Bat</span><span class="atbat-toggle">&#9660;</span></div>
-    <div class="atbat-picks" id="atbatPicks">
-      <button class="ab-btn" data-ab="Strikeout">K<span class="ab-pts">25</span></button>
-      <button class="ab-btn" data-ab="Walk">BB<span class="ab-pts">30</span></button>
-      <button class="ab-btn" data-ab="Groundout">GO<span class="ab-pts">20</span></button>
-      <button class="ab-btn" data-ab="Flyout">FO<span class="ab-pts">20</span></button>
-      <button class="ab-btn" data-ab="Single">1B<span class="ab-pts">50</span></button>
-      <button class="ab-btn" data-ab="Double">2B<span class="ab-pts">100</span></button>
-      <button class="ab-btn" data-ab="Triple">3B<span class="ab-pts">200</span></button>
-      <button class="ab-btn" data-ab="Home Run">HR<span class="ab-pts">250</span></button>
+  <!-- AT-BAT PRIMARY -->
+  <div class="atbat-card" id="atbatCard">
+    <div class="atbat-card-header"><span>&#127919; Predict the At-Bat</span><span class="atbat-pts-label">Higher risk = more points</span></div>
+    <div class="atbat-grid" id="atbatGrid">
+      <button class="ab-btn k" data-ab="Strikeout"><span class="ab-emoji">&#9888;</span>K<span class="ab-pts">25</span></button>
+      <button class="ab-btn bb" data-ab="Walk"><span class="ab-emoji">&#128694;</span>BB<span class="ab-pts">30</span></button>
+      <button class="ab-btn go" data-ab="Groundout"><span class="ab-emoji">&#11015;</span>GO<span class="ab-pts">20</span></button>
+      <button class="ab-btn fo" data-ab="Flyout"><span class="ab-emoji">&#11014;</span>FO<span class="ab-pts">20</span></button>
+      <button class="ab-btn s1" data-ab="Single"><span class="ab-emoji">&#9899;</span>1B<span class="ab-pts">50</span></button>
+      <button class="ab-btn s2" data-ab="Double"><span class="ab-emoji">&#9899;&#9899;</span>2B<span class="ab-pts">100</span></button>
+      <button class="ab-btn s3" data-ab="Triple"><span class="ab-emoji">&#9899;&#9899;&#9899;</span>3B<span class="ab-pts">200</span></button>
+      <button class="ab-btn hr" data-ab="Home Run"><span class="ab-emoji">&#128640;</span>HR<span class="ab-pts">250</span></button>
     </div>
-    <div class="atbat-locked" id="atbatLocked"></div>
+    <div class="rbi-row" id="rbiRowAB" style="display:none"><span class="rbi-label">Predict RBI?</span><button class="rbi-toggle" id="rbiToggleAB"></button><span class="rbi-label">+40 bonus</span></div>
+    <div class="atbat-locked-msg" id="atbatLockedMsg"></div>
   </div>
 
   <div class="sit-badges" id="sitBadges"></div>
 
-  <!-- Count indicators (ESPN style) -->
+  <!-- Count dots -->
   <div class="count-row">
     <div class="count-group">BALLS <span id="ballDots"></span></div>
     <div class="count-group">STRIKES <span id="strikeDots"></span></div>
     <div class="count-group">OUTS <span id="outDots"></span></div>
   </div>
 
-  <!-- Pitch tracker + Base diamond side by side -->
+  <!-- Pitch tracker + Base diamond -->
   <div class="tracker-row">
     <div class="zone-wrap">
       <svg class="strike-zone-svg" id="strikeZoneSVG" viewBox="0 0 220 280">
-        <defs><linearGradient id="szBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a2332"/><stop offset="100%" stop-color="#111827"/></linearGradient></defs>
-        <rect x="0" y="0" width="220" height="280" fill="url(#szBg)"/>
-        <!-- Batter silhouette (right-handed) -->
-        <g opacity="0.18" transform="translate(162,60) scale(0.5)">
-          <path d="M30,10 C30,4.5 25,0 20,0 C15,0 10,4.5 10,10 C10,15.5 15,20 20,20 C25,20 30,15.5 30,10Z" fill="#fff"/>
-          <path d="M5,30 L10,22 L20,22 L30,22 L35,30 L32,70 L36,120 L30,122 L24,75 L20,75 L16,75 L10,122 L4,120 L8,70Z" fill="#fff"/>
-          <path d="M2,28 L10,24 L8,15 L-5,5 L-12,12 L-8,20 L-2,22Z" fill="#fff"/>
-          <path d="M35,28 L30,25 L35,40 L38,38Z" fill="#fff"/>
+        <defs>
+          <linearGradient id="grassBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a3a1a"/><stop offset="100%" stop-color="#0f2810"/></linearGradient>
+          <pattern id="grassPat" width="6" height="6" patternUnits="userSpaceOnUse"><line x1="0" y1="6" x2="3" y2="0" stroke="#1f4f1f" stroke-width="0.5" opacity="0.3"/></pattern>
+        </defs>
+        <rect x="0" y="0" width="220" height="280" fill="url(#grassBg)"/>
+        <rect x="0" y="0" width="220" height="280" fill="url(#grassPat)"/>
+        <!-- Dirt circle around plate -->
+        <ellipse cx="92" cy="255" rx="50" ry="25" fill="#3d2b1f" opacity="0.3"/>
+        <!-- Batter silhouette -->
+        <g opacity="0.15" transform="translate(162,60) scale(0.5)">
+          <circle cx="20" cy="10" r="10" fill="#fff"/>
+          <path d="M5,30 L10,22 L30,22 L35,30 L32,70 L36,120 L30,122 L24,75 L16,75 L10,122 L4,120 L8,70Z" fill="#fff"/>
+          <path d="M2,28 L10,24 L8,15 L-5,5 L-12,12 L-8,20Z" fill="#fff"/>
           <line x1="-12" y1="12" x2="-20" y2="-15" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
         </g>
         <!-- Strike zone box -->
-        <rect id="szRect" x="40" y="55" width="105" height="140" rx="1" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2"/>
-        <!-- Grid lines -->
+        <rect id="szRect" x="40" y="55" width="105" height="140" rx="1" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
         <line id="szH1" x1="40" y1="101" x2="145" y2="101" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
         <line id="szH2" x1="40" y1="148" x2="145" y2="148" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
         <line id="szV1" x1="75" y1="55" x2="75" y2="195" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
         <line id="szV2" x1="110" y1="55" x2="110" y2="195" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
         <!-- Home plate -->
-        <polygon points="72,255 92,265 112,255 112,250 72,250" fill="#d4a574" opacity="0.3"/>
+        <polygon points="72,250 92,260 112,250 112,245 72,245" fill="#d4a574" opacity="0.5"/>
         <g id="pitchDots"></g>
       </svg>
     </div>
-    <!-- Base runner diamond -->
+    <!-- Base diamond with grass/dirt -->
     <div class="diamond-wrap">
       <div class="zone-label">Bases</div>
       <svg class="diamond-svg" viewBox="0 0 100 100">
-        <rect x="0" y="0" width="100" height="100" rx="12" fill="#111827"/>
+        <rect x="0" y="0" width="100" height="100" rx="12" fill="#1a3a1a"/>
+        <!-- Infield dirt -->
+        <polygon points="50,15 85,50 50,85 15,50" fill="#3d2b1f" opacity="0.35"/>
         <!-- Base paths -->
-        <line x1="50" y1="18" x2="82" y2="50" stroke="#334155" stroke-width="1.5"/>
-        <line x1="82" y1="50" x2="50" y2="82" stroke="#334155" stroke-width="1.5"/>
-        <line x1="50" y1="82" x2="18" y2="50" stroke="#334155" stroke-width="1.5"/>
-        <line x1="18" y1="50" x2="50" y2="18" stroke="#334155" stroke-width="1.5"/>
-        <!-- 2B -->
+        <line x1="50" y1="18" x2="82" y2="50" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+        <line x1="82" y1="50" x2="50" y2="82" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+        <line x1="50" y1="82" x2="18" y2="50" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+        <line x1="18" y1="50" x2="50" y2="18" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+        <!-- Bases -->
         <rect id="base2" x="43" y="11" width="14" height="14" rx="2" fill="#334155" transform="rotate(45,50,18)"/>
-        <!-- 1B -->
         <rect id="base1" x="75" y="43" width="14" height="14" rx="2" fill="#334155" transform="rotate(45,82,50)"/>
-        <!-- 3B -->
         <rect id="base3" x="11" y="43" width="14" height="14" rx="2" fill="#334155" transform="rotate(45,18,50)"/>
         <!-- Home -->
-        <polygon points="43,82 50,89 57,82 57,78 43,78" fill="#d4a574" opacity="0.5"/>
+        <polygon points="43,82 50,89 57,82 57,78 43,78" fill="#d4a574" opacity="0.6"/>
+        <!-- Runner dots (hidden by default) -->
+        <circle id="runner1" cx="82" cy="50" r="5" fill="#f59e0b" stroke="#fff" stroke-width="1" style="display:none"/>
+        <circle id="runner2" cx="50" cy="18" r="5" fill="#f59e0b" stroke="#fff" stroke-width="1" style="display:none"/>
+        <circle id="runner3" cx="18" cy="50" r="5" fill="#f59e0b" stroke="#fff" stroke-width="1" style="display:none"/>
       </svg>
       <div class="on-base-text" id="onBaseText">No runners</div>
     </div>
   </div>
 
-  <!-- Predictions -->
-  <div class="runners-display" id="runnersDisplay" style="display:none"></div>
-  <div class="pred-label">Your Call</div>
-  <div class="pred-grid">
-    <button class="pred-btn ball" id="btnBall" disabled>&#9918; Ball<span class="pts" id="ptsBall">5</span></button>
-    <button class="pred-btn strike" id="btnStrike" disabled>&#128293; Strike<span class="pts" id="ptsStrike">10</span></button>
-    <button class="pred-btn foul" id="btnFoul" disabled>&#128208; Foul<span class="pts" id="ptsFoul">15</span></button>
-    <button class="pred-btn out" id="btnOut" disabled>&#128075; Out<span class="pts">30</span></button>
-    <button class="pred-btn hit" id="btnHit" disabled>&#128165; Hit!<span class="pts">60+</span></button>
-    <button class="pred-btn homer" id="btnHomer" disabled>&#128640; Homer!<span class="pts">200</span></button>
-  </div>
-  <div class="hit-sub" id="hitSub">
-    <button class="hit-sub-btn single" id="btnSingle">&#9899; Single<span class="pts">60</span></button>
-    <button class="hit-sub-btn double" id="btnDouble">&#9899;&#9899; Double<span class="pts">120</span></button>
-    <button class="hit-sub-btn triple" id="btnTriple">&#9899;&#9899;&#9899; Triple<span class="pts">250</span></button>
-    <div class="rbi-row" id="rbiRow" style="display:none"><span class="rbi-label">+ RBI?</span><button class="rbi-toggle" id="rbiToggle"></button><span class="rbi-label">+40</span></div>
-  </div>
-  <div class="ptype-row" id="ptypeRow">
-    <button class="ptype-btn" data-pt="Fastball">FB</button>
-    <button class="ptype-btn" data-pt="Breaking">BRK</button>
-    <button class="ptype-btn" data-pt="Offspeed">OFF</button>
+  <!-- PITCH-BY-PITCH SECONDARY -->
+  <div class="pitch-section">
+    <div class="pitch-section-header"><span>&#9918; Pitch Call</span><span id="pitchOddsLabel" style="font-size:9px;color:var(--accent)"></span></div>
+    <div class="pred-grid">
+      <button class="pred-btn ball" id="btnBall" disabled>&#9918; Ball<span class="pts" id="ptsBall">5</span></button>
+      <button class="pred-btn strike" id="btnStrike" disabled>&#128293; Strike<span class="pts" id="ptsStrike">10</span></button>
+      <button class="pred-btn foul" id="btnFoul" disabled>&#128208; Foul<span class="pts" id="ptsFoul">15</span></button>
+      <button class="pred-btn out" id="btnOut" disabled>&#128075; Out<span class="pts">30</span></button>
+      <button class="pred-btn hit" id="btnHit" disabled>&#128165; Hit!<span class="pts">60+</span></button>
+      <button class="pred-btn homer" id="btnHomer" disabled>&#128640; Homer!<span class="pts">200</span></button>
+    </div>
+    <div class="hit-sub" id="hitSub">
+      <div class="hit-sub-row">
+        <button class="hit-sub-btn single" id="btnSingle">&#9899; Single <span class="pts">60</span></button>
+        <button class="hit-sub-btn double" id="btnDouble">&#9899;&#9899; Double <span class="pts">120</span></button>
+        <button class="hit-sub-btn triple" id="btnTriple">&#9899;&#9899;&#9899; Triple <span class="pts">250</span></button>
+      </div>
+      <div class="rbi-row" id="rbiRow" style="display:none"><span class="rbi-label">+ RBI?</span><button class="rbi-toggle" id="rbiToggle"></button><span class="rbi-label">+40</span></div>
+    </div>
+    <div class="ptype-row" id="ptypeRow">
+      <button class="ptype-btn" data-pt="Fastball">Fastball</button>
+      <button class="ptype-btn" data-pt="Breaking">Breaking</button>
+      <button class="ptype-btn" data-pt="Offspeed">Offspeed</button>
+    </div>
   </div>
 
   <div class="status-bar" id="statusBar">Waiting for game data...</div>
   <div class="delay-bar"><label>&#128250; TV Delay</label><input type="range" id="delaySlider" min="0" max="90" value="30"><div class="delay-val" id="delayVal">30s</div></div>
 
-  <!-- Tabs: Pitch Log / Scoring Summary -->
   <div class="tab-bar">
     <button class="tab-btn active" data-tab="pitchLog">Pitch Log</button>
     <button class="tab-btn" data-tab="scoringSummary">Scoring</button>
@@ -446,7 +427,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   <div class="tab-content hidden" id="tabScoringSummary"><div id="scoringPlays"></div></div>
 </div>
 
-<!-- ═══ GAME MODE MODAL ═══ -->
+<!-- GAME MODE MODAL -->
 <div class="modal-overlay" id="modeModal">
   <div class="modal-box">
     <h3 id="modalTeams">--</h3>
@@ -461,26 +442,40 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 
 <script>
 /* ══════════════════════════════════════
+   FIREBASE CONFIG
+   ══════════════════════════════════════ */
+firebase.initializeApp({
+  apiKey:"AIzaSyCSl9q4US-wqEZtF1N77aG_4ohKYUYNKeo",
+  authDomain:"diamond-guesser.firebaseapp.com",
+  databaseURL:"https://diamond-guesser-default-rtdb.firebaseio.com",
+  projectId:"diamond-guesser",
+  storageBucket:"diamond-guesser.firebasestorage.app",
+  messagingSenderId:"687072791912",
+  appId:"1:687072791912:web:eddfe25e8c05207335dadd"
+});
+const db=firebase.database();
+let roomRef=null,roomListener=null;
+
+/* ══════════════════════════════════════
    STATE
    ══════════════════════════════════════ */
 const S={gameId:null,gameActive:false,userScore:0,cpuScore:0,streak:0,bestStreak:0,
   userPick:'',cpuPick:'',rbiPick:false,rbiPickCPU:false,
   pitchTypePick:'',pitchTypeCPU:'',
-  atBatPick:'',atBatCPU:'',lastBatterId:0,atBatResolved:false,
+  atBatPick:'',atBatCPU:'',atBatRbiPick:false,lastBatterId:0,atBatResolved:false,
   lastPitchNum:0,pendingPitches:[],halfTimeShown:false,pitchHistory:[],
   awayTeam:'',homeTeam:'',awayId:0,homeId:0,fetchInterval:null,queueInterval:null,
   runnersOn:0,runnersOnSecond:false,runnersOnThird:false,
   currentCount:{balls:0,strikes:0},currentOuts:0,currentInning:0,
   gamePaused:false,
   playerName:localStorage.getItem('dg_name')||'',
+  playerId:localStorage.getItem('dg_pid')||(()=>{const id=Math.random().toString(36).slice(2,10);localStorage.setItem('dg_pid',id);return id})(),
   leaderboard:JSON.parse(localStorage.getItem('dg_lb')||'[]'),
-  // Multiplayer
-  isMultiplayer:false,isHost:false,roomCode:'',
-  peer:null,conns:[],mpPlayers:[]};
+  isMultiplayer:false,isHost:false,roomCode:'',mpPlayers:{}};
 
 const $=id=>document.getElementById(id);
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active')}
-function teamLogo(id){return 'https://www.mlbstatic.com/team-logos/'+id+'.svg'}
+function teamLogo(id){return'https://www.mlbstatic.com/team-logos/'+id+'.svg'}
 
 /* ══════════════════════════════════════
    TABS
@@ -513,31 +508,20 @@ function renderGameList(el,games,pickMode){
   const other=games.filter(g=>g.status.abstractGameState!=='Live');
   if(!live.length&&!other.length){el.innerHTML='<div style="text-align:center;color:#64748b;padding:20px">No games today</div>';return}
   el.innerHTML='';
-  if(live.length){
-    const lbl=document.createElement('div');lbl.className='section-label';lbl.textContent='Live';el.appendChild(lbl);
-    live.forEach(g=>el.appendChild(makeGameCard(g,'live',pickMode)));
-  }
-  if(other.length){
-    const lbl=document.createElement('div');lbl.className='section-label';lbl.textContent='Other Games';el.appendChild(lbl);
-    other.forEach(g=>{const c=g.status.abstractGameState==='Final'?'final':'preview';el.appendChild(makeGameCard(g,c,pickMode))});
-  }
+  if(live.length){const lbl=document.createElement('div');lbl.className='section-label';lbl.textContent='Live';el.appendChild(lbl);live.forEach(g=>el.appendChild(makeGameCard(g,'live',pickMode)))}
+  if(other.length){const lbl=document.createElement('div');lbl.className='section-label';lbl.textContent='Other Games';el.appendChild(lbl);other.forEach(g=>{const c=g.status.abstractGameState==='Final'?'final':'preview';el.appendChild(makeGameCard(g,c,pickMode))})}
 }
 function makeGameCard(g,cls,pickMode){
   const card=document.createElement('div');card.className='game-card '+cls;
   const aw=g.teams.away,hm=g.teams.home,ls=g.linescore||{},inn=ls.currentInning||'',half=ls.inningHalf||'',st=g.status.detailedState;
   let txt=st;if(cls==='live'&&inn)txt=(half==='Top'?'\u25B2':'\u25BC')+' '+inn;
   const awId=aw.team.id||0,hmId=hm.team.id||0;
-  card.innerHTML=`<div class="gc-teams">
-    <div class="gc-team"><img class="gc-logo" src="${teamLogo(awId)}" onerror="this.style.display='none'" alt=""><span class="gc-team-name">${aw.team.name}</span><span class="gc-score">${aw.score!=null?aw.score:''}</span></div>
-    <div class="gc-team"><img class="gc-logo" src="${teamLogo(hmId)}" onerror="this.style.display='none'" alt=""><span class="gc-team-name">${hm.team.name}</span><span class="gc-score">${hm.score!=null?hm.score:''}</span></div>
-  </div><div class="gc-meta"><div class="gc-status">${txt}</div></div><div class="gc-arrow">\u203A</div>`;
+  card.innerHTML=`<div class="gc-teams"><div class="gc-team"><img class="gc-logo" src="${teamLogo(awId)}" onerror="this.style.display='none'" alt=""><span class="gc-team-name">${aw.team.name}</span><span class="gc-score">${aw.score!=null?aw.score:''}</span></div><div class="gc-team"><img class="gc-logo" src="${teamLogo(hmId)}" onerror="this.style.display='none'" alt=""><span class="gc-team-name">${hm.team.name}</span><span class="gc-score">${hm.score!=null?hm.score:''}</span></div></div><div class="gc-meta"><div class="gc-status">${txt}</div></div><div class="gc-arrow">\u203A</div>`;
   card.addEventListener('click',()=>{
     if(pickMode){
-      mpBroadcast({type:'gameStart',gameId:g.gamePk,away:aw.team.name,home:hm.team.name,awayId:awId,homeId:hmId});
+      if(S.isHost&&roomRef)roomRef.child('game').set({gameId:g.gamePk,away:aw.team.name,home:hm.team.name,awayId:awId,homeId:hmId});
       startGame(g.gamePk,aw.team.name,hm.team.name,awId,hmId);
-    }else{
-      showModeModal(g.gamePk,aw.team.name,hm.team.name,awId,hmId);
-    }
+    }else{showModeModal(g.gamePk,aw.team.name,hm.team.name,awId,hmId)}
   });
   return card;
 }
@@ -552,144 +536,107 @@ function showModeModal(gameId,away,home,awayId,homeId){
   $('modeModal').classList.add('show');
 }
 $('modalSolo').addEventListener('click',()=>{
-  $('modeModal').classList.remove('show');
-  if(!pendingGame)return;S.isMultiplayer=false;S.isHost=false;
+  $('modeModal').classList.remove('show');if(!pendingGame)return;S.isMultiplayer=false;S.isHost=false;
   startGame(pendingGame.gameId,pendingGame.away,pendingGame.home,pendingGame.awayId,pendingGame.homeId);
 });
 $('modalFriends').addEventListener('click',()=>{
-  $('modeModal').classList.remove('show');
-  ensureName();showScreen('screenLobby');
+  $('modeModal').classList.remove('show');ensureName();showScreen('screenLobby');
   $('lobbyOptions').style.display='';$('roomDisplay').classList.remove('show');
 });
 $('modalCancel').addEventListener('click',()=>{$('modeModal').classList.remove('show')});
 
-/* ══════════════════════════════════════
-   HOME — MODE SELECTION
-   ══════════════════════════════════════ */
-$('btnSoloMode').addEventListener('click',()=>{
-  S.isMultiplayer=false;S.isHost=false;
-  // Games list is already shown, do nothing extra — user clicks a game
-});
-$('btnFriendsMode').addEventListener('click',()=>{
-  ensureName();
-  showScreen('screenLobby');
-  $('lobbyOptions').style.display='';$('roomDisplay').classList.remove('show');
-});
+/* HOME MODE */
+$('btnSoloMode').addEventListener('click',()=>{S.isMultiplayer=false;S.isHost=false});
+$('btnFriendsMode').addEventListener('click',()=>{ensureName();showScreen('screenLobby');$('lobbyOptions').style.display='';$('roomDisplay').classList.remove('show')});
 $('lobbyBackBtn').addEventListener('click',()=>{mpDisconnect();showScreen('screenHome')});
 
 function ensureName(){
-  if(!S.playerName){
-    S.playerName=prompt('Enter your name:','Player 1')||'Player';
-    localStorage.setItem('dg_name',S.playerName);
-  }
+  if(!S.playerName){S.playerName=prompt('Enter your name:','Player 1')||'Player';localStorage.setItem('dg_name',S.playerName)}
 }
 
 /* ══════════════════════════════════════
-   MULTIPLAYER — PeerJS
+   MULTIPLAYER — FIREBASE REALTIME DB
    ══════════════════════════════════════ */
-function genCode(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ';let r='';for(let i=0;i<4;i++)r+=c[Math.floor(Math.random()*c.length)];return r}
+function genCode(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let r='';for(let i=0;i<4;i++)r+=c[Math.floor(Math.random()*c.length)];return r}
 
 $('createRoomBtn').addEventListener('click',()=>{
   const code=genCode();S.roomCode=code;S.isMultiplayer=true;S.isHost=true;
-  S.mpPlayers=[{name:S.playerName,score:0,streak:0,isHost:true,isMe:true}];
   $('lobbyOptions').style.display='none';$('roomDisplay').classList.add('show');
   $('roomCodeVal').textContent=code;
   $('roomStatus').textContent='You are the host. Pick a game to start!';
   $('roomGamePick').style.display='';
-  renderRoomPlayers();
-  loadGames($('roomGamesList')).then(()=>renderGameList($('roomGamesList'),cachedGames,true));
 
-  S.peer=new Peer('dg-'+code,{debug:0});
-  S.peer.on('open',()=>{$('roomStatus').textContent='Room open! Waiting for friends...'});
-  S.peer.on('connection',conn=>{
-    S.conns.push(conn);
-    conn.on('data',data=>mpHandleHost(conn,data));
-    conn.on('close',()=>{
-      S.conns=S.conns.filter(c=>c!==conn);
-      S.mpPlayers=S.mpPlayers.filter(p=>p.peerId!==conn.peer);
-      renderRoomPlayers();mpBroadcastRoster();
-    });
+  roomRef=db.ref('rooms/'+code);
+  roomRef.set({host:S.playerId,created:Date.now(),players:{[S.playerId]:{name:S.playerName,score:0,streak:0,isHost:true}}});
+  // Auto-cleanup on disconnect
+  roomRef.onDisconnect().remove();
+
+  // Listen for player changes
+  roomRef.child('players').on('value',snap=>{
+    S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
   });
-  S.peer.on('error',e=>{$('roomStatus').textContent='Connection error: '+e.type});
+  // Listen for game start (for late joiners)
+  roomRef.child('game').on('value',snap=>{
+    const g=snap.val();if(g&&g.gameId&&!S.gameActive)startGame(g.gameId,g.away,g.home,g.awayId,g.homeId);
+  });
+
+  loadGames($('roomGamesList')).then(()=>renderGameList($('roomGamesList'),cachedGames,true));
 });
 
-$('joinRoomBtn').addEventListener('click',()=>{
+$('joinRoomBtn').addEventListener('click',async()=>{
   const code=$('joinCodeInput').value.trim().toUpperCase();
   if(code.length!==4){$('roomStatus').textContent='Enter a 4-letter code';return}
   S.roomCode=code;S.isMultiplayer=true;S.isHost=false;
-  S.mpPlayers=[{name:S.playerName,score:0,streak:0,isMe:true}];
   $('lobbyOptions').style.display='none';$('roomDisplay').classList.add('show');
   $('roomCodeVal').textContent=code;
   $('roomStatus').textContent='Connecting...';
   $('roomGamePick').style.display='none';
-  renderRoomPlayers();
 
-  S.peer=new Peer(undefined,{debug:0});
-  S.peer.on('open',()=>{
-    const conn=S.peer.connect('dg-'+code,{reliable:true});
-    S.conns=[conn];
-    conn.on('open',()=>{
-      conn.send({type:'join',name:S.playerName});
-      $('roomStatus').textContent='Connected! Waiting for host to pick a game...';
-    });
-    conn.on('data',data=>mpHandleClient(data));
-    conn.on('close',()=>{$('roomStatus').textContent='Disconnected from host'});
+  roomRef=db.ref('rooms/'+code);
+  // Check if room exists
+  const snap=await roomRef.once('value');
+  if(!snap.exists()){$('roomStatus').textContent='Room not found. Check the code.';return}
+
+  // Add ourselves
+  roomRef.child('players/'+S.playerId).set({name:S.playerName,score:0,streak:0,isHost:false});
+  roomRef.child('players/'+S.playerId).onDisconnect().remove();
+
+  // Listen for changes
+  roomRef.child('players').on('value',snap=>{
+    S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
   });
-  S.peer.on('error',e=>{$('roomStatus').textContent='Error: '+e.type+'. Check code and try again.'});
+  roomRef.child('game').on('value',snap=>{
+    const g=snap.val();if(g&&g.gameId&&!S.gameActive)startGame(g.gameId,g.away,g.home,g.awayId,g.homeId);
+  });
+  $('roomStatus').textContent='Connected! Waiting for host to pick a game...';
 });
 
-function mpHandleHost(conn,data){
-  if(data.type==='join'){
-    const p={name:data.name,score:0,streak:0,peerId:conn.peer};
-    S.mpPlayers.push(p);renderRoomPlayers();mpBroadcastRoster();
-  }else if(data.type==='scoreUpdate'){
-    const p=S.mpPlayers.find(x=>x.peerId===conn.peer);
-    if(p){p.score=data.score;p.streak=data.streak}
-    renderMPScores();mpBroadcastRoster();
-  }else if(data.type==='pick'){
-    // Could show others' picks — future feature
-  }
-}
-function mpHandleClient(data){
-  if(data.type==='roster'){
-    // Merge roster — keep our own score, update others
-    const myScore=S.userScore,myStreak=S.streak;
-    S.mpPlayers=data.players.map(p=>{
-      if(p.name===S.playerName){return{...p,score:myScore,streak:myStreak,isMe:true}}
-      return{...p,isMe:false};
-    });
-    renderRoomPlayers();renderMPScores();
-  }else if(data.type==='gameStart'){
-    startGame(data.gameId,data.away,data.home,data.awayId,data.homeId);
-  }
-}
-function mpBroadcast(msg){
-  S.conns.forEach(c=>{try{c.send(msg)}catch(e){}});
-}
-function mpBroadcastRoster(){
-  mpBroadcast({type:'roster',players:S.mpPlayers.map(p=>({name:p.name,score:p.score,streak:p.streak,isHost:p.isHost||false}))});
-}
 function mpSendScore(){
-  if(!S.isMultiplayer)return;
-  const me=S.mpPlayers.find(p=>p.isMe);
-  if(me){me.score=S.userScore;me.streak=S.streak}
-  if(S.isHost){renderMPScores();mpBroadcastRoster()}
-  else{mpBroadcast({type:'scoreUpdate',score:S.userScore,streak:S.streak})}
+  if(!S.isMultiplayer||!roomRef)return;
+  roomRef.child('players/'+S.playerId).update({score:S.userScore,streak:S.streak});
 }
 function mpDisconnect(){
-  if(S.peer){try{S.peer.destroy()}catch(e){}}
-  S.peer=null;S.conns=[];S.mpPlayers=[];S.isMultiplayer=false;S.isHost=false;S.roomCode='';
+  if(roomRef){
+    if(S.isHost)roomRef.remove();
+    else roomRef.child('players/'+S.playerId).remove();
+    roomRef.off();roomRef=null;
+  }
+  S.mpPlayers={};S.isMultiplayer=false;S.isHost=false;S.roomCode='';
 }
 function renderRoomPlayers(){
-  const el=$('rpList');
-  el.innerHTML=S.mpPlayers.map(p=>`<div class="rp-item"><span class="rp-name">${p.name}</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}${p.isMe?'<span class="rp-badge">YOU</span>':''}</div>`).join('');
+  const el=$('rpList');const players=S.mpPlayers;
+  el.innerHTML=Object.entries(players).map(([id,p])=>{
+    const isMe=id===S.playerId;
+    return`<div class="rp-item"><span class="rp-name">${p.name}</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}${isMe?'<span class="rp-badge">YOU</span>':''}</div>`;
+  }).join('');
 }
 function renderMPScores(){
   if(!S.isMultiplayer)return;
-  const sorted=[...S.mpPlayers].sort((a,b)=>b.score-a.score);
+  const sorted=Object.entries(S.mpPlayers).map(([id,p])=>({...p,id})).sort((a,b)=>b.score-a.score);
   $('mpScoresList').innerHTML=sorted.map((p,i)=>{
     const medal=i===0?'\uD83E\uDD47 ':i===1?'\uD83E\uDD48 ':i===2?'\uD83E\uDD49 ':'';
-    return`<div class="mp-row${p.isMe?' me':''}">${medal}<span class="mp-name">${p.name}</span><span class="mp-streak">${p.streak}\uD83D\uDD25</span><span class="mp-pts">${p.score}</span></div>`;
+    const isMe=p.id===S.playerId;
+    return`<div class="mp-row${isMe?' me':''}">${medal}<span class="mp-name">${p.name}</span><span class="mp-streak">${p.streak||0}\uD83D\uDD25</span><span class="mp-pts">${p.score||0}</span></div>`;
   }).join('');
 }
 
@@ -701,11 +648,10 @@ function startGame(gameId,away,home,awayId,homeId){
   Object.assign(S,{gameId,awayTeam:away,homeTeam:home,awayId:awayId||0,homeId:homeId||0,
     gameActive:true,gamePaused:false,
     userScore:0,cpuScore:0,streak:0,bestStreak:0,userPick:'',cpuPick:'',
-    pitchTypePick:'',pitchTypeCPU:'',atBatPick:'',atBatCPU:'',lastBatterId:0,atBatResolved:false,
+    pitchTypePick:'',pitchTypeCPU:'',atBatPick:'',atBatCPU:'',atBatRbiPick:false,lastBatterId:0,atBatResolved:false,
     rbiPick:false,rbiPickCPU:false,lastPitchNum:0,pendingPitches:[],halfTimeShown:false,pitchHistory:[],
     currentCount:{balls:0,strikes:0},currentOuts:0,currentInning:0,runnersOn:0,runnersOnSecond:false,runnersOnThird:false});
 
-  // UI reset
   if(awayId)$('awayLogo').src=teamLogo(awayId);if(homeId)$('homeLogo').src=teamLogo(homeId);
   $('awayScore').textContent='0';$('homeScore').textContent='0';$('inningBadge').textContent='--';
   $('yourScore').textContent='0';$('cpuScore').textContent='0';$('streakDisplay').innerHTML='0\uD83D\uDD25';
@@ -714,18 +660,12 @@ function startGame(gameId,away,home,awayId,homeId){
   $('historyLog').innerHTML='';$('halftimeAlert').classList.remove('show');
   $('gameTime').textContent='';$('scoringPlays').innerHTML='';
   $('sitBadges').innerHTML='';$('ptypeRow').classList.remove('open');
-  $('atbatBar').classList.remove('open','locked');$('atbatLocked').textContent='';
-  document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=false);
-  $('hitSub').classList.remove('open');$('runnersDisplay').textContent='';
+  $('atbatCard').classList.remove('locked');$('atbatLockedMsg').textContent='';
+  document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
+  $('hitSub').classList.remove('open');$('pitchOddsLabel').textContent='';
 
-  // Show/hide solo vs multiplayer scores
-  if(S.isMultiplayer){
-    $('soloScores').style.display='none';$('mpScores').style.display='';
-    const me=S.mpPlayers.find(p=>p.isMe);if(me){me.score=0;me.streak=0}
-    renderMPScores();
-  }else{
-    $('soloScores').style.display='';$('mpScores').style.display='none';
-  }
+  if(S.isMultiplayer){$('soloScores').style.display='none';$('mpScores').style.display='';mpSendScore()}
+  else{$('soloScores').style.display='';$('mpScores').style.display='none'}
 
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');
   clearInterval(S.fetchInterval);clearInterval(S.queueInterval);
@@ -754,13 +694,9 @@ function parseGame(d){
   if(isPaused&&!S.gamePaused){S.gamePaused=true;setPred(false);$('statusBar').textContent='\u23F8\uFE0F '+detState;$('statusBar').className='status-bar paused'}
   else if(!isPaused&&S.gamePaused){S.gamePaused=false;setPred(true);$('statusBar').textContent='\uD83C\uDFAF Make your call!';$('statusBar').className='status-bar'}
 
-  // Top bar: score + inning
   const arrow=half==='Top'?'\u25B2':'\u25BC';
   $('inningBadge').textContent=arrow+' '+ordinal(inning);
-  try{
-    const as=ls.teams.away.runs||0,hs=ls.teams.home.runs||0;
-    $('awayScore').textContent=as;$('homeScore').textContent=hs;
-  }catch(e){}
+  try{$('awayScore').textContent=ls.teams.away.runs||0;$('homeScore').textContent=ls.teams.home.runs||0}catch(e){}
 
   // Game time
   try{const dt=d.gameData.datetime;const fp=dt.firstPitch||dt.dateTime;if(fp){const t=new Date(fp);const now=new Date();const diff=t-now;if(diff>0){const mins=Math.floor(diff/60000);$('gameTime').textContent='\u23F0 First pitch in '+mins+' min';$('statusBar').textContent='\uD83C\uDFDF Game starts in '+mins+' minutes...';setPred(false)}else{const h=t.getHours(),m=t.getMinutes();$('gameTime').textContent='\u23F0 Started '+(h>12?h-12:h)+':'+String(m).padStart(2,'0')+(h>=12?' PM':' AM')}}}catch(e){}
@@ -776,14 +712,15 @@ function parseGame(d){
     if(cp.matchup.batter&&cp.matchup.batter.id)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+cp.matchup.batter.id+'/headshot/67/current';
     const batterId=cp.matchup.batter?cp.matchup.batter.id:0;
     if(batterId&&batterId!==S.lastBatterId){
-      S.lastBatterId=batterId;S.atBatPick='';S.atBatCPU='';S.atBatResolved=false;
-      $('atbatBar').classList.remove('locked','open');$('atbatLocked').textContent='';
-      document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=false);
+      S.lastBatterId=batterId;S.atBatPick='';S.atBatCPU='';S.atBatResolved=false;S.atBatRbiPick=false;
+      $('atbatCard').classList.remove('locked');$('atbatLockedMsg').textContent='';
+      document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
+      $('rbiRowAB').style.display=S.runnersOn>0?'flex':'none';$('rbiToggleAB').classList.remove('on');
       clearZone();
     }
   }
 
-  // Count + outs — ESPN dot display
+  // Count + outs
   if(cp&&cp.count){
     const c=cp.count;S.currentCount={balls:c.balls,strikes:c.strikes};S.currentOuts=c.outs;
     $('countDisplay').innerHTML='<span>'+c.balls+'</span>-<span>'+c.strikes+'</span> \u2022 '+c.outs+' out';
@@ -791,13 +728,14 @@ function parseGame(d){
     renderCountDots(c.balls,c.strikes,c.outs);
   }
 
-  // Runners — diamond graphic
+  // Runners
   try{
     const off=ls.offense||{};let r=0;
     const r1=!!off.first,r2=!!off.second,r3=!!off.third;
     S.runnersOnSecond=r2;S.runnersOnThird=r3;
     if(r1)r++;if(r2)r++;if(r3)r++;S.runnersOn=r;
     $('rbiRow').style.display=r>0?'flex':'none';
+    $('rbiRowAB').style.display=r>0&&!S.atBatPick?'flex':'none';
     renderBases(r1,r2,r3,off);
   }catch(e){}
 
@@ -805,7 +743,7 @@ function parseGame(d){
   if(inning>=5&&!S.halfTimeShown)showHalftime(inning,half);
 
   // At-bat result
-  if(cp&&cp.about&&cp.about.isComplete&&cp.result&&cp.result.event&&!S.atBatResolved){resolveAtBat(cp.result.event)}
+  if(cp&&cp.about&&cp.about.isComplete&&cp.result&&cp.result.event&&!S.atBatResolved)resolveAtBat(cp.result.event,cp.result.rbi||0);
 
   // Pitch events
   const events=cp&&cp.playEvents;if(!events||!events.length)return;
@@ -839,9 +777,15 @@ function getCountMult(pick,b,s){
   return 1.0;
 }
 function updateDynamicOdds(b,s){
-  $('ptsBall').textContent=Math.round(5*getCountMult('Ball',b,s));
-  $('ptsStrike').textContent=Math.round(10*getCountMult('Strike',b,s));
-  $('ptsFoul').textContent=Math.round(15*getCountMult('Foul',b,s));
+  const bp=Math.round(5*getCountMult('Ball',b,s));
+  const sp=Math.round(10*getCountMult('Strike',b,s));
+  const fp=Math.round(15*getCountMult('Foul',b,s));
+  $('ptsBall').textContent=bp;$('ptsStrike').textContent=sp;$('ptsFoul').textContent=fp;
+  // Show odds hint
+  if(b>=3)$('pitchOddsLabel').textContent='3-ball count: Strike likely';
+  else if(s>=2)$('pitchOddsLabel').textContent='2-strike count: Ball pays more';
+  else if(b===3&&s===2)$('pitchOddsLabel').textContent='Full count!';
+  else $('pitchOddsLabel').textContent='';
 }
 
 /* ══════════════════════════════════════
@@ -852,7 +796,7 @@ function getSitMult(){
   const twoOut=S.currentOuts===2;
   const risp=S.runnersOnSecond||S.runnersOnThird;
   const clutch=S.currentInning>=7&&risp&&twoOut;
-  if(clutch)return{mult:2.0,label:'\u26A1 CLUTCH 2x',cls:'clutch'};
+  if(clutch)return{mult:3.0,label:'\u26A1 CLUTCH 3x',cls:'clutch'};
   let mult=1.0;const labels=[];
   if(fc){mult=Math.max(mult,1.5);labels.push('\uD83D\uDD25 FULL COUNT 1.5x')}
   if(twoOut){mult=Math.max(mult,1.3);labels.push('\uD83D\uDEA8 2 OUTS 1.3x')}
@@ -880,6 +824,10 @@ function renderBases(r1,r2,r3,off){
   $('base1').setAttribute('fill',r1?'#f59e0b':'#334155');
   $('base2').setAttribute('fill',r2?'#f59e0b':'#334155');
   $('base3').setAttribute('fill',r3?'#f59e0b':'#334155');
+  // Runner dots on diamond
+  $('runner1').style.display=r1?'':'none';
+  $('runner2').style.display=r2?'':'none';
+  $('runner3').style.display=r3?'':'none';
   let txt='';
   if(r1)txt+='1B: <span>'+(off.first?off.first.fullName:'Runner')+'</span> ';
   if(r2)txt+='2B: <span>'+(off.second?off.second.fullName:'Runner')+'</span> ';
@@ -897,7 +845,7 @@ function processQueue(){
 $('delaySlider').addEventListener('input',e=>{$('delayVal').textContent=e.target.value+'s'});
 
 /* ══════════════════════════════════════
-   PREDICTIONS
+   PITCH-BY-PITCH PREDICTIONS
    ══════════════════════════════════════ */
 $('btnBall').addEventListener('click',()=>predict('Ball'));
 $('btnStrike').addEventListener('click',()=>predict('Strike'));
@@ -911,10 +859,7 @@ $('btnTriple').addEventListener('click',()=>predict('Triple'));
 $('rbiToggle').addEventListener('click',()=>{S.rbiPick=!S.rbiPick;$('rbiToggle').classList.toggle('on')});
 
 document.querySelectorAll('.ptype-btn').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    document.querySelectorAll('.ptype-btn').forEach(b=>b.classList.remove('sel'));
-    btn.classList.add('sel');S.pitchTypePick=btn.dataset.pt;
-  });
+  btn.addEventListener('click',()=>{document.querySelectorAll('.ptype-btn').forEach(b=>b.classList.remove('sel'));btn.classList.add('sel');S.pitchTypePick=btn.dataset.pt});
 });
 
 function predict(choice){
@@ -923,12 +868,11 @@ function predict(choice){
   $('ptypeRow').classList.add('open');document.querySelectorAll('.ptype-btn').forEach(b=>b.classList.remove('sel'));
   const lbl=choice+(S.rbiPick?' +RBI':'');
   $('statusBar').textContent='\uD83D\uDD12 '+lbl+' \u2014 pick pitch type or wait...';$('statusBar').className='status-bar';
-  // CPU
   if(!S.isMultiplayer){
-    const r=Math.random()*100,hr=Math.random()*100;
-    S.cpuPick=r<38?'Ball':r<55?'Strike':r<73?'Foul':r<83?'Out':r<90?(hr<65?'Single':hr<90?'Double':'Triple'):'Homer';
+    const r=Math.random()*100;
+    S.cpuPick=r<38?'Ball':r<55?'Strike':r<73?'Foul':r<83?'Out':r<90?(Math.random()<0.65?'Single':Math.random()<0.9?'Double':'Triple'):'Homer';
     S.rbiPickCPU=S.runnersOn>0&&Math.random()<0.4;
-    const ptr=Math.random()*100;S.pitchTypeCPU=ptr<50?'Fastball':ptr<80?'Breaking':'Offspeed';
+    S.pitchTypeCPU=Math.random()<0.5?'Fastball':Math.random()<0.8?'Breaking':'Offspeed';
   }
   if(navigator.vibrate)navigator.vibrate(30);
 }
@@ -938,34 +882,55 @@ function setPred(on){
 }
 
 /* ══════════════════════════════════════
-   AT-BAT PREDICTION
+   AT-BAT PREDICTION (PRIMARY)
    ══════════════════════════════════════ */
-$('atbatHeader').addEventListener('click',()=>{if(S.atBatPick||!S.gameActive)return;$('atbatBar').classList.toggle('open')});
+$('rbiToggleAB').addEventListener('click',()=>{S.atBatRbiPick=!S.atBatRbiPick;$('rbiToggleAB').classList.toggle('on')});
 document.querySelectorAll('.ab-btn').forEach(btn=>{
   btn.addEventListener('click',()=>{
-    if(S.atBatPick)return;S.atBatPick=btn.dataset.ab;
+    if(S.atBatPick||!S.gameActive)return;
+    S.atBatPick=btn.dataset.ab;
+    document.querySelectorAll('.ab-btn').forEach(b=>b.classList.remove('sel'));btn.classList.add('sel');
     if(!S.isMultiplayer){const r=Math.random()*100;S.atBatCPU=r<25?'Strikeout':r<35?'Walk':r<50?'Groundout':r<65?'Flyout':r<80?'Single':r<90?'Double':r<95?'Triple':'Home Run'}
-    $('atbatBar').classList.remove('open');$('atbatBar').classList.add('locked');
-    $('atbatLocked').textContent='\uD83D\uDD12 '+S.atBatPick;
+    $('atbatCard').classList.add('locked');
+    $('atbatLockedMsg').textContent='\uD83D\uDD12 '+S.atBatPick+(S.atBatRbiPick?' + RBI':'');
     document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
+    if(navigator.vibrate)navigator.vibrate([30,20,30]);
   });
 });
+
 const AB_SCORES={Strikeout:25,Walk:30,Groundout:20,Flyout:20,Single:50,Double:100,Triple:200,'Home Run':250};
-function resolveAtBat(event){
+function resolveAtBat(event,rbi){
   S.atBatResolved=true;
-  let ev=event;if(ev.includes('Strikeout'))ev='Strikeout';if(ev.includes('Walk'))ev='Walk';
-  if(ev.includes('Groundout')||ev.includes('Grounded'))ev='Groundout';
-  if(ev.includes('Flyout')||ev.includes('Fly Out')||ev.includes('Pop Out')||ev.includes('Lineout'))ev='Flyout';
+  let ev=event;
+  if(ev.includes('Strikeout')||ev.includes('Strikes out'))ev='Strikeout';
+  else if(ev.includes('Walk'))ev='Walk';
+  else if(ev.includes('Groundout')||ev.includes('Grounded')||ev.includes('Ground'))ev='Groundout';
+  else if(ev.includes('Flyout')||ev.includes('Fly Out')||ev.includes('Pop Out')||ev.includes('Lineout')||ev.includes('Line Out'))ev='Flyout';
+  else if(ev.includes('Home Run'))ev='Home Run';
+  else if(ev.includes('Triple'))ev='Triple';
+  else if(ev.includes('Double'))ev='Double';
+  else if(ev.includes('Single'))ev='Single';
+
   let uPts=0,cPts=0;
-  if(S.atBatPick){if(S.atBatPick===ev)uPts=AB_SCORES[ev]||30;S.userScore+=uPts}
-  if(S.atBatCPU){if(S.atBatCPU===ev)cPts=AB_SCORES[ev]||30;S.cpuScore+=cPts}
+  const sit=getSitMult();
+  if(S.atBatPick){
+    if(S.atBatPick===ev)uPts=AB_SCORES[ev]||30;
+    if(S.atBatRbiPick&&rbi>0)uPts+=40;
+    if(uPts>0)uPts=Math.round(uPts*sit.mult);
+    S.userScore+=uPts;
+  }
+  if(S.atBatCPU){
+    if(S.atBatCPU===ev)cPts=AB_SCORES[ev]||30;
+    if(cPts>0)cPts=Math.round(cPts*sit.mult);
+    S.cpuScore+=cPts;
+  }
   if(S.atBatPick){
     const log=$('historyLog'),el=document.createElement('div');el.className='hist-entry';
     el.innerHTML='<span class="pitch-num">AB</span> '+ev+' '+(uPts>0?'<span class="pts-good">+'+uPts+'</span>':'<span class="pts-bad">+0</span>');
     log.prepend(el);
   }
   $('yourScore').textContent=S.userScore;$('cpuScore').textContent=S.cpuScore;
-  $('atbatLocked').textContent='\u2705 '+ev+(S.atBatPick===ev?' NAILED IT!':'');
+  $('atbatLockedMsg').textContent=(uPts>0?'\u2705':'\u274C')+' '+ev+(S.atBatPick===ev?' NAILED IT! +'+uPts:' +0');
   mpSendScore();
 }
 
@@ -973,10 +938,10 @@ function resolveAtBat(event){
    PITCH TYPE SCORING
    ══════════════════════════════════════ */
 function classifyPitchType(code){
-  if(['FF','SI','FC'].includes(code))return 'Fastball';
-  if(['ST','SL','CU','KC','CS','KN'].includes(code))return 'Breaking';
-  if(['CH','FS','EP','FO','SC'].includes(code))return 'Offspeed';
-  return 'Fastball';
+  if(['FF','SI','FC'].includes(code))return'Fastball';
+  if(['ST','SL','CU','KC','CS','KN'].includes(code))return'Breaking';
+  if(['CH','FS','EP','FO','SC'].includes(code))return'Offspeed';
+  return'Fastball';
 }
 
 /* ══════════════════════════════════════
@@ -1000,33 +965,30 @@ function scoreCall(pick,cc,pr,b,s){
 
 function resolvePitch(p){
   drawPitch(p);$('ptypeRow').classList.remove('open');
-  let uPts=0;
+  let uPts=0;const sit=getSitMult();
   if(S.userPick){
     uPts=scoreCall(S.userPick,p.callCode,p.playResult,p.countBalls,p.countStrikes);
     if(S.rbiPick&&p.playRbi>0)uPts+=40;
     if(S.pitchTypePick&&uPts>0&&classifyPitchType(p.typeCode)===S.pitchTypePick)uPts+=20;
-    if(uPts>0){const sit=getSitMult();uPts=Math.round(uPts*sit.mult);S.streak++;if(S.streak>S.bestStreak)S.bestStreak=S.streak;if(S.streak>=3)uPts+=Math.floor((S.streak-2)*uPts*0.1)}else{S.streak=0}
+    if(uPts>0){uPts=Math.round(uPts*sit.mult);S.streak++;if(S.streak>S.bestStreak)S.bestStreak=S.streak;if(S.streak>=3)uPts+=Math.floor((S.streak-2)*uPts*0.1)}else{S.streak=0}
     S.userScore+=uPts;
     if(uPts>0){$('statusBar').textContent='\u2705 +'+uPts+'! '+p.desc;$('statusBar').className='status-bar correct';if(navigator.vibrate)navigator.vibrate([50,30,50])}
     else{$('statusBar').textContent='\u274C '+p.desc;$('statusBar').className='status-bar wrong';if(navigator.vibrate)navigator.vibrate(100)}
   }else{$('statusBar').textContent='\u23E9 '+p.desc+' (no pick)';$('statusBar').className='status-bar'}
 
-  // CPU scoring (solo only)
   if(!S.isMultiplayer){
     let cPts=0;if(S.cpuPick){
       cPts=scoreCall(S.cpuPick,p.callCode,p.playResult,p.countBalls,p.countStrikes);
       if(S.rbiPickCPU&&p.playRbi>0)cPts+=40;
       if(S.pitchTypeCPU&&cPts>0&&classifyPitchType(p.typeCode)===S.pitchTypeCPU)cPts+=20;
-      if(cPts>0){const sit=getSitMult();cPts=Math.round(cPts*sit.mult)}
+      if(cPts>0)cPts=Math.round(cPts*sit.mult);
       S.cpuScore+=cPts;
     }
     $('cpuScore').textContent=S.cpuScore;
   }
 
-  $('yourScore').textContent=S.userScore;
-  $('streakDisplay').innerHTML=S.streak+'\uD83D\uDD25';
-  addHistory(p,uPts);
-  mpSendScore();
+  $('yourScore').textContent=S.userScore;$('streakDisplay').innerHTML=S.streak+'\uD83D\uDD25';
+  addHistory(p,uPts);mpSendScore();
   S.userPick='';S.cpuPick='';S.rbiPick=false;S.rbiPickCPU=false;S.pitchTypePick='';S.pitchTypeCPU='';
   if(!S.gamePaused)setPred(true);
   setTimeout(()=>{$('statusBar').className='status-bar';if(!S.userPick&&S.gameActive&&!S.gamePaused)$('statusBar').textContent='\uD83C\uDFAF Make your call!'},2500);
@@ -1038,34 +1000,26 @@ function resolvePitch(p){
 function clearZone(){$('pitchDots').innerHTML='';S.pitchHistory=[];S.pitchCount=0}
 function drawPitch(p){
   if(p.pX===null||p.pZ===null)return;
-  // Map pitch coordinates to SVG: zone is x:40-145, y:55-195
-  // pX range is roughly -2 to 2 feet, pZ is roughly 0 to 5 feet
-  const zoneLeft=40,zoneRight=145,zoneW=zoneRight-zoneLeft;
-  const svgX=zoneLeft+zoneW/2+(p.pX/2.5)*(zoneW/2);
-  // pZ: map strike zone range to SVG zone area
-  const zoneTop=55,zoneBot=195,zoneH=zoneBot-zoneTop;
-  const szMid=(p.szTop+p.szBot)/2,szRange=p.szTop-p.szBot;
-  const svgY=zoneTop+zoneH/2-((p.pZ-szMid)/Math.max(szRange*1.5,2))*zoneH;
+  const zL=40,zR=145,zW=zR-zL;
+  const svgX=zL+zW/2+(p.pX/2.5)*(zW/2);
+  const zT=55,zB=195,zH=zB-zT;
+  const szMid=(p.szTop+p.szBot)/2,szR=p.szTop-p.szBot;
+  const svgY=zT+zH/2-((p.pZ-szMid)/Math.max(szR*1.5,2))*zH;
 
   let color='#64748b';const cc=p.callCode;
   if(cc==='B')color='#4ade80';else if(cc==='C'||cc==='S'||cc==='T')color='#ef4444';
   else if(cc==='F')color='#f59e0b';else if(cc==='D'||cc==='E'||cc==='X')color='#3b82f6';
 
   const dots=$('pitchDots');
-  // Fade old dots
-  dots.querySelectorAll('.pdot').forEach(g=>{
-    const op=Math.max(0.2,parseFloat(g.getAttribute('opacity')||1)-0.15);
-    g.setAttribute('opacity',op);
-  });
+  dots.querySelectorAll('.pdot').forEach(g=>{const op=Math.max(0.2,parseFloat(g.getAttribute('opacity')||1)-0.15);g.setAttribute('opacity',op)});
 
   S.pitchHistory.push({x:svgX,y:svgY,color});
-  if(!S.pitchCount)S.pitchCount=0;
-  S.pitchCount++;
+  if(!S.pitchCount)S.pitchCount=0;S.pitchCount++;
   if(S.pitchHistory.length>12){S.pitchHistory.shift();const first=dots.querySelector('.pdot');if(first)first.remove()}
 
-  // Update strike zone position
-  const szTop2=zoneTop+zoneH/2-((p.szTop-szMid)/Math.max(szRange*1.5,2))*zoneH;
-  const szBot2=zoneTop+zoneH/2-((p.szBot-szMid)/Math.max(szRange*1.5,2))*zoneH;
+  // Update zone position
+  const szTop2=zT+zH/2-((p.szTop-szMid)/Math.max(szR*1.5,2))*zH;
+  const szBot2=zT+zH/2-((p.szBot-szMid)/Math.max(szR*1.5,2))*zH;
   const h=szBot2-szTop2;
   $('szRect').setAttribute('y',szTop2);$('szRect').setAttribute('height',h);
   const t=h/3;
@@ -1073,7 +1027,6 @@ function drawPitch(p){
   $('szH2').setAttribute('y1',szTop2+2*t);$('szH2').setAttribute('y2',szTop2+2*t);
   [$('szV1'),$('szV2')].forEach(l=>{l.setAttribute('y1',szTop2);l.setAttribute('y2',szBot2)});
 
-  // Draw numbered circle (ESPN style)
   const g=document.createElementNS('http://www.w3.org/2000/svg','g');
   g.setAttribute('class','pdot');g.setAttribute('opacity','1');
   const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');
@@ -1103,9 +1056,8 @@ function addHistory(p,uPts){
 function showHalftime(inn,half){
   S.halfTimeShown=true;$('htTitle').textContent='\uD83C\uDFDF Mid-Game \u2014 '+half+' '+ordinal(inn);
   let msg='You: '+S.userScore;
-  if(S.isMultiplayer){const sorted=[...S.mpPlayers].sort((a,b)=>b.score-a.score);msg+=sorted.length>1?' | Leader: '+sorted[0].name+' '+sorted[0].score:''}
+  if(S.isMultiplayer){const sorted=Object.values(S.mpPlayers).sort((a,b)=>b.score-a.score);msg+=sorted.length>1?' | Leader: '+sorted[0].name+' '+sorted[0].score:''}
   else{msg+=' | CPU: '+S.cpuScore}
-  msg+='\n'+(S.userScore>(S.isMultiplayer?(S.mpPlayers[0]||{}).score:S.cpuScore)?'\uD83D\uDFE2 Winning!':'\uD83D\uDD34 Behind!');
   $('htBody').textContent=msg;$('halftimeAlert').classList.add('show');
   setTimeout(()=>$('halftimeAlert').classList.remove('show'),8000);
 }
