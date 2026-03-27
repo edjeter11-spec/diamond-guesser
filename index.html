@@ -941,9 +941,10 @@ function renderMPScores(){
     const medal=i===0?'\uD83E\uDD47 ':i===1?'\uD83E\uDD48 ':i===2?'\uD83E\uDD49 ':'';
     const isMe=p.id===S.playerId;
     let pickTag='';
-    if(p.lastPick){
+    if(p.ready){pickTag=`<span style="font-size:9px;color:#4ade80;margin-left:3px">\u2705</span>`}
+    else if(p.lastPick){
       const icon=p.lastGot===true?'\u2705':p.lastGot===false?'\u274C':'';
-      pickTag=`<span style="font-size:9px;color:${p.lastGot?'#4ade80':'#f87171'};margin-left:4px">${icon}${p.lastPick}</span>`;
+      pickTag=`<span style="font-size:9px;color:${p.lastGot?'#4ade80':'#f87171'};margin-left:3px">${icon}${p.lastPick}</span>`;
     }
     return`<div class="mp-row${isMe?' me':''}">${medal}<span class="mp-name">${p.name}${pickTag}</span><span class="mp-pts">${p.score||0}</span></div>`;
   }).join('');
@@ -1289,6 +1290,8 @@ function lockPitchPick(){
   if(!S.userPick||pitchLocked)return;
   pitchLocked=true;
   setPred(false);
+  if(practiceMode)practiceAutoCheck();
+  if(S.isMultiplayer&&roomRef)roomRef.child('players/'+S.playerId+'/ready').set(true);
   if(!S.isMultiplayer){
     const r=Math.random()*100;
     S.cpuPick=r<38?'Ball':r<55?'Strike':r<73?'Foul':r<83?'Out':r<90?(Math.random()<0.65?'Single':Math.random()<0.9?'Double':'Triple'):'Homer';
@@ -1346,6 +1349,9 @@ function abLock(){
   $('atbatLockedMsg').textContent='\uD83D\uDD12 At-Bat: '+S.atBatPick+(S.atBatRbiPick?' + RBI':'');
   document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
   if(navigator.vibrate)navigator.vibrate([30,20,30]);
+  if(practiceMode)practiceAutoCheck();
+  // MP: broadcast that we're ready
+  if(S.isMultiplayer&&roomRef)roomRef.child('players/'+S.playerId+'/ready').set(true);
 }
 function abStartCountdown(){
   if(abState==='locked'||!S.atBatPick)return;
@@ -1472,6 +1478,7 @@ function resolvePitch(p){
 
   $('yourScore').textContent=S.userScore;updateStreakUI();
   addHistory(p,uPts);mpSendScore(S.userPick||null,S.userPick?uPts>0:null);renderGameLB();
+  if(S.isMultiplayer&&roomRef)roomRef.child('players/'+S.playerId+'/ready').set(false);
   // Update count dots from this pitch's count
   renderCountDots(p.countBalls,p.countStrikes,p.countOuts);
   // Auto-clear zone on ball in play (D=in play, E=in play+runs, X=in play+out)
@@ -1766,6 +1773,23 @@ function updatePctlInfo(){
   $('pctlInfo').textContent=(practiceIdx)+'/'+practicePitches.length;
 }
 
+// Auto-advance in manual mode when both picks are locked
+function practiceAutoCheck(){
+  if(!practiceWaiting||practiceSpeed!==0)return;
+  const hasPitch=!!S.userPick&&pitchLocked;
+  const hasAB=abState==='locked'||abState==='result';
+  if(hasPitch&&hasAB){
+    // Both locked — auto-advance after 2 seconds
+    $('statusBar').textContent='\u2705 Picks locked \u2014 advancing...';$('statusBar').className='status-bar correct';
+    practiceWaiting=false;
+    practiceTimer=setTimeout(practiceNextPitch,2000);
+  }else if(hasPitch||hasAB){
+    $('statusBar').textContent='\uD83C\uDFAF '+(hasPitch?'Pitch locked \u2014 pick at-bat too, or tap Next':'At-bat locked \u2014 pick pitch too, or tap Next');$('statusBar').className='status-bar';
+  }else{
+    setTimeout(()=>{if(practiceWaiting)$('statusBar').textContent='\uD83C\uDFAF Make your picks, then tap Next Pitch';$('statusBar').className='status-bar'},2500);
+  }
+}
+
 async function startPractice(isMP){
   const btn=isMP?$('btnMPPractice'):$('btnPractice');
   btn.textContent='Loading game...';
@@ -1994,10 +2018,10 @@ function practiceNextPitch(){
   if(practiceIdx<practicePitches.length){
     setPred(true);resetPitchState();
     if(practiceSpeed===0){
-      // Manual mode — wait for user to click Next
+      // Manual mode — auto-advance if both picks are made, otherwise wait
       practiceWaiting=true;
       $('pctlNext').disabled=false;
-      setTimeout(()=>{$('statusBar').textContent='\uD83C\uDFAF Make your pick, then tap Next Pitch';$('statusBar').className='status-bar'},2500);
+      practiceAutoCheck();
     }else{
       // Auto mode
       practiceTimer=setTimeout(practiceNextPitch,practiceSpeed);
