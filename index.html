@@ -994,12 +994,14 @@ function startGame(gameId,away,home,awayId,homeId){
   feedBuffer=[];
   clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
 
-  if(S.isMultiplayer){
-    // MP: only host fetches API, clients listen to Firebase
+  if(practiceMode){
+    // Practice mode handles its own pitch flow — don't start fetch loops
+  }else if(S.isMultiplayer){
+    // MP live: only host fetches API, clients listen to Firebase
     if(S.isHost){mpHostStart()}
     else{mpClientStart()}
   }else{
-    // Solo: fetch directly
+    // Solo live: fetch directly
     fetchLoop();S.queueInterval=setInterval(processQueue,300);
   }
 }
@@ -2104,10 +2106,9 @@ async function startPractice(isMP){
     updatePctlInfo();
 
     if(isMP&&roomRef){
-      // Host: broadcast game info and control pitch timing via Firebase
+      // Host: broadcast game info, use synced pitch-by-pitch flow
       roomRef.child('practice').set({away,home,awayId,homeId,gamePk,date:ds,totalPitches:practicePitches.length,currentIdx:0});
-      // Host drives the pitch timer
-      practiceTimer=setTimeout(practiceNextPitchMP,practiceSpeed);
+      mpPracticeStart();
     }else{
       // Solo practice — manual mode waits, auto mode starts timer
       if(practiceSpeed===0){practiceWaiting=true;$('pctlNext').disabled=false}
@@ -2120,8 +2121,8 @@ async function startPractice(isMP){
   btn.textContent=isMP?'\uD83C\uDF93 Practice Together (Simulated Game)':'\uD83C\uDF93 Practice Mode \u2014 Learn How to Play';
 }
 
-// MP practice: host advances the pitch index in Firebase
-function practiceNextPitchMP(){
+// MP practice: host broadcasts pitch, waits for all ready, triggers synced resolve
+function mpPracticeSendNextPitch(){
   if(!S.gameActive||!practiceMode||practiceIdx>=practicePitches.length){
     if(practiceIdx>=practicePitches.length){
       S.gameActive=false;if(S.userScore>0){saveLB();saveUserStats()}
@@ -2129,14 +2130,64 @@ function practiceNextPitchMP(){
     }
     return;
   }
-  // Advance locally
-  practiceNextPitch();
-  // Tell Firebase current index so clients can verify sync
-  if(roomRef)roomRef.child('practice/currentIdx').set(practiceIdx);
-  // Schedule next
-  if(practiceIdx<practicePitches.length){
-    practiceTimer=setTimeout(practiceNextPitchMP,practiceSpeed);
-  }
+  const p=practicePitches[practiceIdx];
+  // Broadcast game state for this pitch
+  const gs={
+    inning:p.inning,half:p.half,inningState:'',
+    awayRuns:0,homeRuns:0,detState:'',
+    pitcherName:p.pitcherName,pitcherId:p.pitcherId,
+    batterName:p.batterName,batterId:p.batterId,
+    balls:p.countBalls,strikes:p.countStrikes,outs:p.countOuts,
+    r1:false,r2:false,r3:false,r1Name:'',r2Name:'',r3Name:''
+  };
+  roomRef.child('gameState').set(gs);
+  // Store the pitch as pending — wait for all ready
+  mpPendingPitch=p;
+  // Reset everyone's ready
+  const players=S.mpPlayers;
+  Object.keys(players).forEach(pid=>{roomRef.child('players/'+pid+'/ready').set(false)});
+  // Broadcast pending pitch notification
+  roomRef.child('pendingPitch').set({pitchNum:p.pitchNum,desc:'Pitch #'+p.pitchNum+' incoming...',time:Date.now()});
+  // Also apply state locally for host
+  mpApplyGameState(gs);
+  setPred(true);resetPitchState();
+  $('statusBar').textContent='\uD83C\uDFAF Pitch #'+p.pitchNum+' \u2014 make your picks!';$('statusBar').className='status-bar';
+}
+
+// Called from startPractice for MP — kick off the first pitch
+function mpPracticeStart(){
+  // Host listens for all-ready to trigger countdown
+  roomRef.child('players').on('value',snap=>{
+    S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
+    if(mpPendingPitch&&S.gameActive){
+      const players=Object.values(S.mpPlayers);
+      const allReady=players.length>0&&players.every(p=>p.ready===true);
+      if(allReady){
+        // All ready — trigger synced countdown with the practice pitch
+        roomRef.child('countdown').set({start:Date.now(),pitch:mpPendingPitch});
+        mpPendingPitch=null;
+      }
+    }
+  });
+  // Host + clients both listen for countdown
+  roomRef.child('countdown').on('value',snap=>{
+    const cd=snap.val();if(!cd||!cd.pitch)return;
+    mpRunCountdown(cd.pitch);
+    // After resolve, advance to next pitch
+    setTimeout(()=>{
+      practiceIdx++;
+      updatePctlInfo();
+      if(S.isHost&&practiceIdx<practicePitches.length){
+        // Small delay then send next pitch
+        setTimeout(mpPracticeSendNextPitch,2000);
+      }else if(practiceIdx>=practicePitches.length){
+        S.gameActive=false;if(S.userScore>0){saveLB();saveUserStats()}
+        setTimeout(showEndGame,1500);
+      }
+    },3500);// wait for countdown (3s) + small buffer
+  });
+  // Send first pitch
+  mpPracticeSendNextPitch();
 }
 
 // Clients joining MP practice: listen for game data and fetch their own copy
@@ -2148,52 +2199,32 @@ function setupPracticeListener(){
   roomRef.child('practice').on('value',async snap=>{
     const prac=snap.val();
     if(!prac||!prac.gamePk||practiceMode)return;
-    // Client: fetch the same game and start practice
-    try{
-      const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+prac.gamePk+'/feed/live');
-      const gd=await r.json();
-      practicePitches=[];practiceIdx=0;
-      const allPlays=gd.liveData.plays.allPlays||[];
-      for(let p=0;p<allPlays.length;p++){
-        const play=allPlays[p];const events=play.playEvents||[];
-        const batter=play.matchup&&play.matchup.batter?play.matchup.batter:{};
-        const pitcher=play.matchup&&play.matchup.pitcher?play.matchup.pitcher:{};
-        const inning=play.about?play.about.inning:0;const half=play.about?play.about.halfInning:'';
-        const isComplete=play.about?play.about.isComplete:false;
-        const playResult=play.result?play.result.event:'';const playRbi=play.result?play.result.rbi||0:0;
-        for(let e=0;e<events.length;e++){
-          const ev=events[e];if(!ev.isPitch)continue;
-          practicePitches.push({pitchNum:ev.pitchNumber,desc:ev.details?ev.details.description:'?',
-            callCode:ev.details&&ev.details.call?ev.details.call.code:'',typeCode:ev.details&&ev.details.type?ev.details.type.code:'',
-            typeDesc:ev.details&&ev.details.type?ev.details.type.description:'',
-            pX:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pX:null,
-            pZ:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pZ:null,
-            szTop:ev.pitchData?ev.pitchData.strikeZoneTop||3.5:3.5,szBot:ev.pitchData?ev.pitchData.strikeZoneBottom||1.5:1.5,
-            speed:ev.pitchData?ev.pitchData.startSpeed:null,
-            count:ev.count?ev.count.balls+'-'+ev.count.strikes:'',countBalls:ev.count?ev.count.balls:0,
-            countStrikes:ev.count?ev.count.strikes:0,countOuts:ev.count?ev.count.outs:0,
-            playResult,playRbi,batterName:batter.fullName||'',batterId:batter.id||0,
-            pitcherName:pitcher.fullName||'',pitcherId:pitcher.id||0,inning,half,
-            isLastPitchOfAB:e===events.length-1&&isComplete,abResult:isComplete?playResult:'',abRbi:playRbi});
-        }
-      }
-      practiceMode=true;
-      startGame(prac.gamePk,prac.away,prac.home,prac.awayId,prac.homeId);
-      clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);S.gameActive=true;
-      $('practiceBadge').classList.add('show');$('practiceSpeed').classList.remove('show');// clients don't control speed
-      document.querySelector('.delay-bar').style.display='none';
-      $('gameTime').textContent='\uD83C\uDFAC Replay: '+prac.away+' vs '+prac.home+' ('+prac.date+')';
-      setPred(true);
-      // Client: listen for pitch index changes from host
-      roomRef.child('practice/currentIdx').on('value',idxSnap=>{
-        const targetIdx=idxSnap.val();
-        if(targetIdx===null||targetIdx===undefined)return;
-        // Catch up to host's current pitch
-        while(practiceIdx<targetIdx&&practiceIdx<practicePitches.length){
-          practiceNextPitch();
-        }
-      });
-    }catch(e){console.error('Practice join error:',e)}
+    // Client joins practice — set up game screen
+    practiceMode=true;practiceIdx=0;
+    startGame(prac.gamePk,prac.away,prac.home,prac.awayId,prac.homeId);
+    clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);S.gameActive=true;
+    $('practiceBadge').classList.add('show');$('practiceSpeed').classList.remove('show');
+    $('practiceControls').classList.remove('show');
+    document.querySelector('.delay-bar').style.display='none';
+    $('gameTime').textContent='\uD83C\uDFAC Replay: '+prac.away+' vs '+prac.home+' ('+prac.date+')';
+    setPred(true);
+    // Client uses synced Firebase listeners — gameState, pendingPitch, countdown
+    roomRef.child('gameState').on('value',gsSnap=>{
+      const gs=gsSnap.val();if(gs)mpApplyGameState(gs);
+    });
+    roomRef.child('pendingPitch').on('value',ppSnap=>{
+      const pp=ppSnap.val();if(!pp)return;
+      setPred(true);resetPitchState();
+      $('statusBar').textContent='\uD83D\uDCE1 '+pp.desc+' \u2014 make your picks!';$('statusBar').className='status-bar';
+    });
+    roomRef.child('countdown').on('value',cdSnap=>{
+      const cd=cdSnap.val();if(!cd||!cd.pitch)return;
+      mpRunCountdown(cd.pitch);
+      setTimeout(()=>{practiceIdx++;setPred(true);resetPitchState()},3500);
+    });
+    roomRef.child('players').on('value',plSnap=>{
+      S.mpPlayers=plSnap.val()||{};renderRoomPlayers();renderMPScores();
+    });
   });
 }
 
