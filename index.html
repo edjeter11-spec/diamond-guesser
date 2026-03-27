@@ -1213,10 +1213,10 @@ function mpApplyGameState(gs){
     abReset();clearZone();
     $('statusBar').textContent='\uD83C\uDFAF '+gs.batterName+' is up \u2014 make your call!';$('statusBar').className='status-bar';
   }
-  S.currentCount={balls:gs.balls,strikes:gs.strikes};S.currentOuts=gs.outs;
-  renderCountDots(gs.balls,gs.strikes,gs.outs);
-  $('countDisplay').innerHTML='<span>'+gs.balls+'</span>-<span>'+gs.strikes+'</span> \u2022 '+gs.outs+' out';
-  updateDynamicOdds(gs.balls,gs.strikes);
+  // DON'T update count dots here — they spoil the pitch result
+  // Count updates happen inside resolvePitch after countdown/delay
+  // Only store for odds calculation (user already sees their prediction locked)
+  updateDynamicOdds(S.currentCount.balls,S.currentCount.strikes);
   const r1=gs.r1,r2=gs.r2,r3=gs.r3;let rCount=0;
   if(r1)rCount++;if(r2)rCount++;if(r3)rCount++;
   S.runnersOn=rCount;S.runnersOnSecond=r2;S.runnersOnThird=r3;
@@ -1788,8 +1788,11 @@ function resolvePitch(p){
   $('yourScore').textContent=S.userScore;updateStreakUI();
   addHistory(p,uPts);mpSendScore(S.userPick||null,S.userPick?uPts>0:null);renderGameLB();
   if(S.isMultiplayer&&roomRef)roomRef.child('players/'+S.playerId+'/ready').set(false);
-  // Update count dots from this pitch's count
+  // Update count dots + display from this pitch's count (synced with result reveal)
+  S.currentCount={balls:p.countBalls,strikes:p.countStrikes};S.currentOuts=p.countOuts;
   renderCountDots(p.countBalls,p.countStrikes,p.countOuts);
+  const cd=$('countDisplay');if(cd)cd.innerHTML='<span>'+p.countBalls+'</span>-<span>'+p.countStrikes+'</span> \u2022 '+p.countOuts+' out';
+  updateDynamicOdds(p.countBalls,p.countStrikes);
   // Auto-clear zone on ball in play (D=in play, E=in play+runs, X=in play+out)
   if(p.callCode==='D'||p.callCode==='E'||p.callCode==='X'){
     setTimeout(()=>{clearZone();renderCountDots(0,0,S.currentOuts)},1500);
@@ -2480,11 +2483,9 @@ function practiceNextPitch(){
   $('inningBadge').textContent=arrow+' '+ordinal(p.inning);
   S.currentInning=p.inning;
 
-  // Update count
-  renderCountDots(p.countBalls,p.countStrikes,p.countOuts);
-  S.currentCount={balls:p.countBalls,strikes:p.countStrikes};
-  S.currentOuts=p.countOuts;
-  updateDynamicOdds(p.countBalls,p.countStrikes);
+  // DON'T update count here — it spoils the pitch result
+  // Count will update inside resolvePitch after the 3-2-1 countdown
+  // Only update odds based on the PREVIOUS count (already in S.currentCount)
   updateSitBadges();
 
   // If user has a pitch pick, lock it now
