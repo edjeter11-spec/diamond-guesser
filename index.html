@@ -143,6 +143,11 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .score-card.you .sc-val{color:var(--accent2)}
 .score-card.cpu .sc-val{color:var(--blue)}
 .score-card.streak .sc-val{color:var(--accent);font-size:22px}
+.sc-ready{font-size:16px;position:absolute;top:4px;right:6px;transition:all .3s}
+.sc-ready.done{color:#4ade80;animation:none}
+.sc-ready.waiting{color:var(--muted);animation:readyPulse 1.5s ease-in-out infinite}
+@keyframes readyPulse{0%,100%{opacity:1}50%{opacity:0.3}}
+.waiting-msg{font-size:11px;color:var(--muted);animation:readyPulse 1.5s ease-in-out infinite}
 .mp-scores{background:var(--card);border-radius:var(--radius);padding:8px 10px}
 .mp-scores h4{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:4px}
 .mp-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:13px}
@@ -446,10 +451,11 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 
   <!-- Solo scores -->
   <div class="scores-row" id="soloScores">
-    <div class="score-card you"><div class="sc-label">You</div><div class="sc-val" id="yourScore">0</div></div>
+    <div class="score-card you"><div class="sc-ready" id="youReady">⏳</div><div class="sc-label">You</div><div class="sc-val" id="yourScore">0</div></div>
     <div class="score-card streak"><div class="sc-label">Streak</div><div class="sc-val" id="streakDisplay">0&#128293;</div></div>
-    <div class="score-card cpu"><div class="sc-label">CPU</div><div class="sc-val" id="cpuScore">0</div></div>
+    <div class="score-card cpu"><div class="sc-ready" id="cpuReady">⏳</div><div class="sc-label">CPU</div><div class="sc-val" id="cpuScore">0</div></div>
   </div>
+  <div class="waiting-msg" id="waitingMsg" style="display:none;text-align:center;font-size:12px;color:var(--muted);padding:2px 0"></div>
   <!-- Multiplayer scores -->
   <div class="mp-scores" id="mpScores" style="display:none"><h4>Leaderboard</h4><div id="mpScoresList"></div></div>
 
@@ -1544,7 +1550,8 @@ function lockPitchPick(){
     S.pitchTypeCPU=Math.random()<0.5?'Fastball':Math.random()<0.8?'Breaking':'Offspeed';
   }
   const lbl=S.userPick+(S.rbiPick?' +RBI':'')+(S.pitchTypePick?' ('+S.pitchTypePick+')':'');
-  $('statusBar').textContent='\uD83D\uDD12 Pitch: '+lbl+' \u2014 locked! Waiting for result...';$('statusBar').className='status-bar';
+  $('statusBar').textContent='\uD83D\uDD12 Pitch: '+lbl+' \u2014 locked!';$('statusBar').className='status-bar';
+  updateReadyIndicators();
 }
 function startPitchLockCountdown(){
   if(pitchLocked||!S.userPick)return;
@@ -1562,6 +1569,11 @@ function resetPitchState(){
   document.querySelectorAll('.pred-btn').forEach(b=>b.classList.remove('sel'));
   // Unlock pitch type buttons
   document.querySelectorAll('.ptype-btn').forEach(b=>{b.style.pointerEvents='';b.style.opacity=''});
+  // Reset ready indicators
+  const yr=$('youReady'),cr=$('cpuReady');
+  if(yr){yr.textContent='⏳';yr.className='sc-ready waiting'}
+  if(cr){cr.textContent='⏳';cr.className='sc-ready waiting'}
+  $('waitingMsg').style.display='none';
 }
 function setPred(on){
   ['btnBall','btnStrike','btnFoul','btnOut','btnHit','btnHomer'].forEach(id=>{$(id).disabled=!on});
@@ -1595,6 +1607,7 @@ function abLock(){
   $('atbatLockedMsg').textContent='\uD83D\uDD12 At-Bat: '+S.atBatPick+(S.atBatRbiPick?' + RBI':'');
   document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
   if(navigator.vibrate)navigator.vibrate([30,20,30]);
+  updateReadyIndicators();
   if(practiceMode)practiceAutoCheck();
   mpCheckReady();
 }
@@ -2041,20 +2054,53 @@ function updatePctlInfo(){
   $('pctlInfo').textContent=(practiceIdx)+'/'+practicePitches.length;
 }
 
+// Ready state tracking
+function updateReadyIndicators(){
+  const hasPitch=!!S.userPick&&pitchLocked;
+  const hasAB=abState==='locked'||abState==='result';
+  const youReady=hasPitch&&hasAB;
+  const el=$('youReady');
+  if(el){
+    el.textContent=youReady?'✅':'⏳';
+    el.className='sc-ready '+(youReady?'done':'waiting');
+  }
+  // CPU is always ready in solo (picks instantly)
+  const cpuEl=$('cpuReady');
+  if(cpuEl&&!S.isMultiplayer){
+    const cpuHasPick=!!S.cpuPick||!S.gameActive;
+    cpuEl.textContent=youReady?'✅':'⏳';
+    cpuEl.className='sc-ready '+(youReady?'done':'waiting');
+  }
+  // Waiting message
+  const wm=$('waitingMsg');
+  if(wm){
+    if(!youReady&&S.gameActive&&practiceWaiting){
+      const needPitch=!hasPitch,needAB=!hasAB;
+      if(needPitch&&needAB)wm.textContent='Pick your at-bat and pitch call to continue';
+      else if(needAB)wm.textContent='Pitch locked ✅ — now pick at-bat outcome';
+      else wm.textContent='At-bat locked ✅ — now pick pitch call';
+      wm.style.display='';
+    }else{wm.style.display='none'}
+  }
+  return youReady;
+}
+
 // Auto-advance in manual mode when both picks are locked
 function practiceAutoCheck(){
   if(!practiceWaiting||practiceSpeed!==0)return;
   const hasPitch=!!S.userPick&&pitchLocked;
   const hasAB=abState==='locked'||abState==='result';
+  updateReadyIndicators();
   if(hasPitch&&hasAB){
-    // Both locked — auto-advance after 2 seconds
-    $('statusBar').textContent='\u2705 Picks locked \u2014 advancing...';$('statusBar').className='status-bar correct';
+    // Both locked — auto-advance after 1.5 seconds
+    $('statusBar').textContent='\u2705 Both picks locked — here it comes!';$('statusBar').className='status-bar correct';
+    $('waitingMsg').style.display='none';
     practiceWaiting=false;
-    practiceTimer=setTimeout(practiceNextPitch,2000);
+    practiceTimer=setTimeout(practiceNextPitch,1500);
   }else if(hasPitch||hasAB){
-    $('statusBar').textContent='\uD83C\uDFAF '+(hasPitch?'Pitch locked \u2014 pick at-bat too, or tap Next':'At-bat locked \u2014 pick pitch too, or tap Next');$('statusBar').className='status-bar';
+    $('statusBar').textContent='\uD83C\uDFAF '+(hasPitch?'Pitch locked — pick at-bat to continue':'At-bat locked — pick pitch to continue');$('statusBar').className='status-bar';
   }else{
-    setTimeout(()=>{if(practiceWaiting)$('statusBar').textContent='\uD83C\uDFAF Make your picks, then tap Next Pitch';$('statusBar').className='status-bar'},2500);
+    setTimeout(()=>{if(practiceWaiting){$('statusBar').textContent='\uD83C\uDFAF Make both picks to continue';$('statusBar').className='status-bar'}},2500);
   }
 }
 
