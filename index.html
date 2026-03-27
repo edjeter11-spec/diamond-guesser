@@ -713,10 +713,13 @@ function parseGame(d){
     const batterId=cp.matchup.batter?cp.matchup.batter.id:0;
     if(batterId&&batterId!==S.lastBatterId){
       S.lastBatterId=batterId;S.atBatPick='';S.atBatCPU='';S.atBatResolved=false;S.atBatRbiPick=false;
+      S.lastPitchNum=0;S.currentCount={balls:0,strikes:0};
       $('atbatCard').classList.remove('locked');$('atbatLockedMsg').textContent='';
       document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
       $('rbiRowAB').style.display=S.runnersOn>0?'flex':'none';$('rbiToggleAB').classList.remove('on');
-      clearZone();
+      clearZone();renderCountDots(0,0,S.currentOuts);
+      updateDynamicOdds(0,0);
+      $('statusBar').textContent='\uD83C\uDFAF New batter — make your call!';$('statusBar').className='status-bar';
     }
   }
 
@@ -989,6 +992,12 @@ function resolvePitch(p){
 
   $('yourScore').textContent=S.userScore;$('streakDisplay').innerHTML=S.streak+'\uD83D\uDD25';
   addHistory(p,uPts);mpSendScore();
+  // Update count dots from this pitch's count
+  renderCountDots(p.countBalls,p.countStrikes,p.countOuts);
+  // Auto-clear zone on ball in play (D=in play, E=in play+runs, X=in play+out)
+  if(p.callCode==='D'||p.callCode==='E'||p.callCode==='X'){
+    setTimeout(()=>{clearZone();renderCountDots(0,0,S.currentOuts)},1500);
+  }
   S.userPick='';S.cpuPick='';S.rbiPick=false;S.rbiPickCPU=false;S.pitchTypePick='';S.pitchTypeCPU='';
   if(!S.gamePaused)setPred(true);
   setTimeout(()=>{$('statusBar').className='status-bar';if(!S.userPick&&S.gameActive&&!S.gamePaused)$('statusBar').textContent='\uD83C\uDFAF Make your call!'},2500);
