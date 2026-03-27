@@ -884,20 +884,25 @@ function startGame(gameId,away,home,awayId,homeId){
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');
   feedBuffer=[];
   clearInterval(S.fetchInterval);clearInterval(S.queueInterval);
-  fetchGame();S.fetchInterval=setInterval(fetchGame,getFetchInterval());S.queueInterval=setInterval(processQueue,500);
+  fetchLoop();S.queueInterval=setInterval(processQueue,300);
 }
-function stopGame(){S.gameActive=false;clearInterval(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}}
+function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}}
 
 /* ══════════════════════════════════════
    FETCH + DELAYED FEED
    ══════════════════════════════════════ */
 // Buffer entire API responses — only apply after TV delay
 let feedBuffer=[];
+async function fetchLoop(){
+  if(!S.gameActive)return;
+  await fetchGame();
+  S.fetchInterval=setTimeout(fetchLoop,getFetchInterval());
+}
 async function fetchGame(){
   if(!S.gameActive)return;
   setScoreLoading(true);
   try{
-    const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+S.gameId+'/feed/live');
+    const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+S.gameId+'/feed/live?fields=gameData,datetime,firstPitch,dateTime,status,detailedState,teams,away,home,name,abbreviation,id,liveData,linescore,currentInning,inningHalf,inningState,teams,away,home,runs,offense,first,second,third,fullName,batter,onDeck,inHole,defense,pitcher,plays,currentPlay,matchup,pitcher,batter,fullName,id,count,balls,strikes,outs,about,isComplete,inning,halfInning,result,event,eventType,description,rbi,awayScore,homeScore,isScoringPlay,playEvents,isPitch,pitchNumber,details,description,call,code,type,code,description,pitchData,coordinates,pX,pZ,strikeZoneTop,strikeZoneBottom,startSpeed,allPlays,scoringPlays');
     if(!r.ok)throw new Error(r.status);
     const d=await r.json();
     feedBuffer.push({data:d,time:Date.now()/1000});
@@ -1066,7 +1071,7 @@ function applyDelayedFeed(d){
 
   // Detect game over
   if(detState==='Final'||detState==='Game Over'){
-    if(S.gameActive){S.gameActive=false;clearInterval(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}setTimeout(showEndGame,2000)}
+    if(S.gameActive){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}setTimeout(showEndGame,2000)}
   }
 }
 
@@ -1602,10 +1607,10 @@ function updateDynamicBg(dt){
    LIFECYCLE
    ══════════════════════════════════════ */
 // Use fastest possible polling when delay is 0 (LIVE mode)
-function getFetchInterval(){return parseInt($('delaySlider').value)===0?2000:3000}
+function getFetchInterval(){return parseInt($('delaySlider').value)===0?1200:2500}
 document.addEventListener('visibilitychange',()=>{
-  if(document.hidden){clearInterval(S.fetchInterval);clearInterval(S.queueInterval)}
-  else if(S.gameActive){fetchGame();S.fetchInterval=setInterval(fetchGame,getFetchInterval());S.queueInterval=setInterval(processQueue,500)}
+  if(document.hidden){clearTimeout(S.fetchInterval);clearInterval(S.queueInterval)}
+  else if(S.gameActive){fetchLoop();S.queueInterval=setInterval(processQueue,300)}
 });
 window.addEventListener('beforeunload',()=>{if(S.userScore>0){saveLB();saveUserStats()}mpDisconnect()});
 // Auth handles initial screen — don't show home until logged in
