@@ -11,6 +11,7 @@
 <title>Diamond Guesser</title>
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 :root{--bg:#0a0e1a;--card:#111827;--card2:#1a2332;--accent:#f59e0b;--accent2:#10b981;--red:#ef4444;--blue:#3b82f6;--text:#f1f5f9;--muted:#64748b;--radius:14px;--safe-top:env(safe-area-inset-top,0px);--safe-bot:env(safe-area-inset-bottom,0px)}
@@ -18,6 +19,30 @@
 html{height:100%;background:var(--bg)}
 body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;padding:calc(8px + var(--safe-top)) 8px calc(8px + var(--safe-bot));-webkit-tap-highlight-color:transparent;user-select:none;overflow-x:hidden}
 .screen{display:none;flex-direction:column;gap:8px;max-width:500px;margin:0 auto;width:100%}.screen.active{display:flex}
+
+/* AUTH */
+.auth-hero{text-align:center;padding:40px 0 20px}
+.auth-hero h1{font-size:36px;font-weight:900;letter-spacing:-1px;background:linear-gradient(135deg,#f59e0b 0%,#ef4444 50%,#f59e0b 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.auth-hero p{color:var(--muted);font-size:13px;margin-top:4px}
+.auth-hero .auth-emoji{font-size:48px;display:block;margin-bottom:8px}
+.auth-card{background:var(--card);border-radius:var(--radius);padding:20px}
+.auth-card h3{font-size:16px;font-weight:700;margin-bottom:12px;text-align:center}
+.auth-input{width:100%;background:var(--card2);border:2px solid #334155;border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;outline:none;margin-bottom:8px}
+.auth-input:focus{border-color:var(--accent)}
+.auth-input::placeholder{color:#475569}
+.auth-btn{width:100%;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;transition:transform .1s;margin-bottom:8px}
+.auth-btn:active{transform:scale(0.97)}
+.auth-btn.primary{background:linear-gradient(135deg,#f59e0b,#d97706);color:#000}
+.auth-btn.secondary{background:linear-gradient(135deg,#10b981,#059669);color:#fff}
+.auth-btn.ghost{background:transparent;color:var(--muted);border:1px solid #334155}
+.auth-toggle{text-align:center;font-size:12px;color:var(--muted);padding:8px 0}
+.auth-toggle a{color:var(--accent);cursor:pointer;font-weight:600;text-decoration:none}
+.auth-error{color:var(--red);font-size:12px;text-align:center;padding:4px 0;min-height:20px}
+.auth-balance{background:linear-gradient(135deg,#1e3a5f,#0f3460);border-radius:var(--radius);padding:16px;text-align:center;margin-bottom:8px}
+.auth-balance .bal-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700}
+.auth-balance .bal-val{font-size:36px;font-weight:900;color:var(--accent);margin:4px 0}
+.auth-balance .bal-name{font-size:13px;color:var(--text);font-weight:600}
+.auth-logout{background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:4px 8px}
 
 /* HOME */
 .home-hero{text-align:center;padding:28px 0 12px}
@@ -284,9 +309,45 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 </head>
 <body>
 
+<!-- AUTH -->
+<div class="screen active" id="screenAuth">
+  <div class="auth-hero">
+    <span class="auth-emoji">&#9918;</span>
+    <h1>Diamond Guesser</h1>
+    <p>Predict the pitch before it hits the TV</p>
+  </div>
+  <div class="auth-card" id="authLoginCard">
+    <h3>Welcome Back</h3>
+    <input class="auth-input" id="authEmail" type="email" placeholder="Email" autocomplete="email">
+    <input class="auth-input" id="authPass" type="password" placeholder="Password" autocomplete="current-password">
+    <div class="auth-error" id="authError"></div>
+    <button class="auth-btn primary" id="authLoginBtn">Log In</button>
+    <div class="auth-toggle">Don't have an account? <a id="authShowSignup">Sign Up</a></div>
+  </div>
+  <div class="auth-card" id="authSignupCard" style="display:none">
+    <h3>Create Account</h3>
+    <input class="auth-input" id="signupName" type="text" placeholder="Display Name" autocomplete="name">
+    <input class="auth-input" id="signupEmail" type="email" placeholder="Email" autocomplete="email">
+    <input class="auth-input" id="signupPass" type="password" placeholder="Password (6+ characters)" autocomplete="new-password">
+    <div class="auth-error" id="signupError"></div>
+    <button class="auth-btn primary" id="authSignupBtn">Create Account</button>
+    <div class="auth-toggle">Already have an account? <a id="authShowLogin">Log In</a></div>
+  </div>
+  <button class="auth-btn ghost" id="authGuestBtn">Continue as Guest</button>
+</div>
+
 <!-- HOME -->
-<div class="screen active" id="screenHome">
-  <div class="home-hero"><h1>Diamond Guesser</h1><p>Predict the pitch before it hits the TV</p></div>
+<div class="screen" id="screenHome">
+  <div class="home-hero">
+    <div style="display:flex;justify-content:space-between;align-items:center"><span></span><button class="auth-logout" id="logoutBtn">Log Out</button></div>
+    <h1>Diamond Guesser</h1>
+    <p>Predict the pitch before it hits the TV</p>
+  </div>
+  <div class="auth-balance" id="homeBalance">
+    <div class="bal-name" id="balName">Player</div>
+    <div class="bal-label">Total Points</div>
+    <div class="bal-val" id="balVal">0</div>
+  </div>
   <div class="home-actions">
     <button class="btn-solo" id="btnSoloMode">Solo vs CPU</button>
     <button class="btn-friends" id="btnFriendsMode">Play with Friends</button>
@@ -519,7 +580,91 @@ firebase.initializeApp({
   appId:"1:687072791912:web:eddfe25e8c05207335dadd"
 });
 const db=firebase.database();
+const auth=firebase.auth();
 let roomRef=null,roomListener=null;
+let currentUser=null,userBalance=0;
+
+/* ══════════════════════════════════════
+   AUTH — Login / Signup / Guest
+   ══════════════════════════════════════ */
+// Toggle login/signup forms
+$('authShowSignup').addEventListener('click',()=>{$('authLoginCard').style.display='none';$('authSignupCard').style.display='';$('signupError').textContent=''});
+$('authShowLogin').addEventListener('click',()=>{$('authSignupCard').style.display='none';$('authLoginCard').style.display='';$('authError').textContent=''});
+
+// Sign up
+$('authSignupBtn').addEventListener('click',async()=>{
+  const name=$('signupName').value.trim();const email=$('signupEmail').value.trim();const pass=$('signupPass').value;
+  if(!name){$('signupError').textContent='Please enter a display name';return}
+  if(!email){$('signupError').textContent='Please enter an email';return}
+  if(pass.length<6){$('signupError').textContent='Password must be at least 6 characters';return}
+  $('signupError').textContent='';$('authSignupBtn').textContent='Creating...';
+  try{
+    const cred=await auth.createUserWithEmailAndPassword(email,pass);
+    await cred.user.updateProfile({displayName:name});
+    await db.ref('users/'+cred.user.uid).set({name:name,balance:0,gamesPlayed:0,bestStreak:0,created:Date.now()});
+  }catch(e){$('signupError').textContent=e.message;$('authSignupBtn').textContent='Create Account'}
+});
+
+// Log in
+$('authLoginBtn').addEventListener('click',async()=>{
+  const email=$('authEmail').value.trim();const pass=$('authPass').value;
+  if(!email||!pass){$('authError').textContent='Please enter email and password';return}
+  $('authError').textContent='';$('authLoginBtn').textContent='Logging in...';
+  try{await auth.signInWithEmailAndPassword(email,pass)}
+  catch(e){$('authError').textContent=e.message;$('authLoginBtn').textContent='Log In'}
+});
+
+// Guest
+$('authGuestBtn').addEventListener('click',async()=>{
+  $('authGuestBtn').textContent='Connecting...';
+  try{await auth.signInAnonymously()}
+  catch(e){$('authGuestBtn').textContent='Continue as Guest';alert('Error: '+e.message)}
+});
+
+// Logout
+$('logoutBtn').addEventListener('click',()=>{auth.signOut()});
+
+// Auth state listener
+auth.onAuthStateChanged(async(user)=>{
+  if(user){
+    currentUser=user;
+    const isGuest=user.isAnonymous;
+    S.playerName=user.displayName||(isGuest?'Guest':'Player');
+    S.playerId=user.uid;
+    localStorage.setItem('dg_name',S.playerName);
+    // Load balance from Firebase
+    const snap=await db.ref('users/'+user.uid).once('value');
+    const data=snap.val();
+    if(data){userBalance=data.balance||0}
+    else{await db.ref('users/'+user.uid).set({name:S.playerName,balance:0,gamesPlayed:0,bestStreak:0,created:Date.now()});userBalance=0}
+    // Update home screen
+    $('balName').textContent=S.playerName+(isGuest?' (Guest)':'');
+    $('balVal').textContent=userBalance.toLocaleString();
+    $('logoutBtn').style.display=isGuest?'none':'';
+    $('homeBalance').style.display='';
+    showScreen('screenHome');renderHomeLB();loadGames();
+  }else{
+    currentUser=null;userBalance=0;
+    showScreen('screenAuth');
+    $('authLoginBtn').textContent='Log In';$('authSignupBtn').textContent='Create Account';$('authGuestBtn').textContent='Continue as Guest';
+  }
+});
+
+// Save points to Firebase after each game
+function saveUserBalance(pointsEarned){
+  if(!currentUser)return;
+  userBalance+=pointsEarned;
+  db.ref('users/'+currentUser.uid).update({balance:userBalance,lastPlayed:Date.now()});
+  $('balVal').textContent=userBalance.toLocaleString();
+}
+function saveUserStats(){
+  if(!currentUser)return;
+  db.ref('users/'+currentUser.uid).update({
+    gamesPlayed:firebase.database.ServerValue.increment(1),
+    bestStreak:Math.max(S.bestStreak,0),
+    lastPlayed:Date.now()
+  });
+}
 
 /* ══════════════════════════════════════
    STATE
@@ -591,7 +736,7 @@ function makeGameCard(g,cls,pickMode){
   return card;
 }
 $('refreshGames').addEventListener('click',()=>loadGames());
-$('backBtn').addEventListener('click',()=>{stopGame();showScreen(S.isMultiplayer?'screenLobby':'screenHome');renderHomeLB()});
+$('backBtn').addEventListener('click',()=>{stopGame();showScreen(S.isMultiplayer?'screenLobby':'screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString()});
 
 /* ══════ GAME MODE MODAL ══════ */
 let pendingGame=null;
@@ -616,7 +761,7 @@ $('btnFriendsMode').addEventListener('click',()=>{ensureName();showScreen('scree
 $('lobbyBackBtn').addEventListener('click',()=>{mpDisconnect();showScreen('screenHome')});
 
 function ensureName(){
-  if(!S.playerName){S.playerName=prompt('Enter your name:','Player 1')||'Player';localStorage.setItem('dg_name',S.playerName)}
+  if(!S.playerName){S.playerName=currentUser&&currentUser.displayName?currentUser.displayName:'Guest';localStorage.setItem('dg_name',S.playerName)}
 }
 
 /* ══════════════════════════════════════
@@ -741,7 +886,7 @@ function startGame(gameId,away,home,awayId,homeId){
   clearInterval(S.fetchInterval);clearInterval(S.queueInterval);
   fetchGame();S.fetchInterval=setInterval(fetchGame,getFetchInterval());S.queueInterval=setInterval(processQueue,500);
 }
-function stopGame(){S.gameActive=false;clearInterval(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0)saveLB()}
+function stopGame(){S.gameActive=false;clearInterval(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}}
 
 /* ══════════════════════════════════════
    FETCH + DELAYED FEED
@@ -921,7 +1066,7 @@ function applyDelayedFeed(d){
 
   // Detect game over
   if(detState==='Final'||detState==='Game Over'){
-    if(S.gameActive){S.gameActive=false;clearInterval(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0)saveLB();setTimeout(showEndGame,2000)}
+    if(S.gameActive){S.gameActive=false;clearInterval(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}setTimeout(showEndGame,2000)}
   }
 }
 
@@ -1141,7 +1286,7 @@ function resolveAtBat(event,rbi){
     if(S.atBatPick===ev)uPts=AB_SCORES[ev]||30;
     if(S.atBatRbiPick&&rbi>0)uPts+=40;
     if(uPts>0)uPts=Math.round(uPts*sit.mult);
-    S.userScore+=uPts;
+    S.userScore+=uPts;if(uPts>0)saveUserBalance(uPts);
   }
   if(S.atBatCPU){
     if(S.atBatCPU===ev)cPts=AB_SCORES[ev]||30;
@@ -1214,7 +1359,7 @@ function resolvePitch(p){
     if(S.pitchTypePick&&uPts>0&&classifyPitchType(p.typeCode)===S.pitchTypePick)uPts+=20;
     S.totalPredictions++;
     if(uPts>0){uPts=Math.round(uPts*sit.mult);S.streak++;S.correctCount++;if(S.streak>S.bestStreak)S.bestStreak=S.streak;if(S.streak>=3)uPts+=Math.floor((S.streak-2)*uPts*0.1)}else{S.streak=0}
-    S.userScore+=uPts;
+    S.userScore+=uPts;if(uPts>0)saveUserBalance(uPts);
     if(uPts>0){$('statusBar').textContent='\u2705 +'+uPts+'! '+p.desc;$('statusBar').className='status-bar correct';if(navigator.vibrate)navigator.vibrate([50,30,50]);playSound(p.callCode==='E'?'homer':'correct');if(p.callCode==='E')triggerConfetti()}
     else{$('statusBar').textContent='\u274C '+p.desc;$('statusBar').className='status-bar wrong';if(navigator.vibrate)navigator.vibrate(100);playSound('wrong');triggerShake()}
   }else{$('statusBar').textContent='\u23E9 '+p.desc+' (no pick)';$('statusBar').className='status-bar'}
@@ -1316,7 +1461,7 @@ function showHalftime(inn,half){
    LEADERBOARD
    ══════════════════════════════════════ */
 function saveLB(){
-  if(!S.playerName){S.playerName=prompt('Your name:','Player 1')||'Anonymous';localStorage.setItem('dg_name',S.playerName)}
+  if(!S.playerName)S.playerName=currentUser&&currentUser.displayName?currentUser.displayName:'Guest';
   let f=false;for(const e of S.leaderboard){if(e.n===S.playerName){if(e.s<S.userScore)e.s=S.userScore;f=true;break}}
   if(!f)S.leaderboard.push({n:S.playerName,s:S.userScore});
   S.leaderboard.sort((a,b)=>b.s-a.s);if(S.leaderboard.length>10)S.leaderboard.length=10;
@@ -1425,7 +1570,7 @@ function updateStreakUI(){
 /* ══════════════════════════════════════
    END-OF-GAME SUMMARY
    ══════════════════════════════════════ */
-$('egClose').addEventListener('click',()=>{$('endgameOverlay').classList.remove('show');showScreen('screenHome');renderHomeLB()});
+$('egClose').addEventListener('click',()=>{$('endgameOverlay').classList.remove('show');showScreen('screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString()});
 function showEndGame(){
   const total=S.pitchCount||0;const correct=S.correctCount||0;
   $('egScore').textContent=S.userScore;
@@ -1462,8 +1607,8 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden){clearInterval(S.fetchInterval);clearInterval(S.queueInterval)}
   else if(S.gameActive){fetchGame();S.fetchInterval=setInterval(fetchGame,getFetchInterval());S.queueInterval=setInterval(processQueue,500)}
 });
-window.addEventListener('beforeunload',()=>{if(S.userScore>0)saveLB();mpDisconnect()});
-renderHomeLB();loadGames();
+window.addEventListener('beforeunload',()=>{if(S.userScore>0){saveLB();saveUserStats()}mpDisconnect()});
+// Auth handles initial screen — don't show home until logged in
 </script>
 </body>
 </html>
