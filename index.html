@@ -1011,18 +1011,43 @@ function setPred(on){
    AT-BAT PREDICTION (PRIMARY)
    ══════════════════════════════════════ */
 $('rbiToggleAB').addEventListener('click',()=>{S.atBatRbiPick=!S.atBatRbiPick;$('rbiToggleAB').classList.toggle('on')});
+let atBatLockTimer=null;let atBatLocked=false;
 document.querySelectorAll('.ab-btn').forEach(btn=>{
   btn.addEventListener('click',()=>{
-    if(S.atBatPick||!S.gameActive)return;
+    if(atBatLocked||!S.gameActive)return;
+    // Allow changing pick before lock
     S.atBatPick=btn.dataset.ab;
     document.querySelectorAll('.ab-btn').forEach(b=>b.classList.remove('sel'));btn.classList.add('sel');
-    if(!S.isMultiplayer){const r=Math.random()*100;S.atBatCPU=r<25?'Strikeout':r<35?'Walk':r<50?'Groundout':r<65?'Flyout':r<80?'Single':r<90?'Double':r<95?'Triple':'Home Run'}
-    $('atbatCard').classList.add('locked');
-    $('atbatLockedMsg').textContent='\uD83D\uDD12 '+S.atBatPick+(S.atBatRbiPick?' + RBI':'');
-    document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
-    if(navigator.vibrate)navigator.vibrate([30,20,30]);
+    $('atbatLockedMsg').textContent='';$('atbatCard').classList.remove('locked');
+    if(navigator.vibrate)navigator.vibrate(20);
   });
 });
+function lockAtBatPick(){
+  if(!S.atBatPick||atBatLocked)return;
+  atBatLocked=true;
+  if(!S.isMultiplayer){const r=Math.random()*100;S.atBatCPU=r<25?'Strikeout':r<35?'Walk':r<50?'Groundout':r<65?'Flyout':r<80?'Single':r<90?'Double':r<95?'Triple':'Home Run'}
+  $('atbatCard').classList.add('locked');
+  $('atbatLockedMsg').textContent='\uD83D\uDD12 '+S.atBatPick+(S.atBatRbiPick?' + RBI':'');
+  document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
+  if(navigator.vibrate)navigator.vibrate([30,20,30]);
+  playSound('correct');
+}
+function startAtBatLockCountdown(){
+  if(atBatLocked||!S.atBatPick)return;
+  let sec=5;
+  $('atbatLockedMsg').style.display='block';
+  $('atbatLockedMsg').textContent='\u23F0 Locking in '+sec+'...';
+  if(atBatLockTimer)clearInterval(atBatLockTimer);
+  atBatLockTimer=setInterval(()=>{
+    sec--;
+    if(sec<=0){clearInterval(atBatLockTimer);atBatLockTimer=null;lockAtBatPick()}
+    else{$('atbatLockedMsg').textContent='\u23F0 Locking in '+sec+'...'}
+  },1000);
+}
+function resetAtBatState(){
+  atBatLocked=false;if(atBatLockTimer){clearInterval(atBatLockTimer);atBatLockTimer=null}
+  $('atbatLockedMsg').style.display='';
+}
 
 const AB_SCORES={Strikeout:25,Walk:30,Groundout:20,Flyout:20,Single:50,Double:100,Triple:200,'Home Run':250};
 function resolveAtBat(event,rbi){
