@@ -141,10 +141,34 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .sit-badge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:#78350f;color:var(--accent)}
 .sit-badge.clutch{background:#7f1d1d;color:#fca5a5;animation:pulse 1.5s infinite}
 
-/* Strike zone — BIG and centered */
-.zone-section{display:flex;flex-direction:column;align-items:center}
-.zone-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
-.strike-zone-svg{width:100%;max-width:300px;height:auto;aspect-ratio:4/5;background:var(--card);border-radius:var(--radius);overflow:hidden}
+/* ESPN-style pitch tracker + base diamond row */
+.tracker-row{display:flex;gap:8px;align-items:stretch}
+.zone-wrap{flex:1;min-width:0}
+.zone-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;text-align:center}
+.strike-zone-svg{width:100%;background:var(--card);border-radius:var(--radius);overflow:hidden;display:block}
+/* Count indicator row */
+.count-row{display:flex;justify-content:center;gap:16px;padding:6px 0;background:var(--card);border-radius:var(--radius) var(--radius) 0 0;margin-bottom:-2px}
+.count-group{display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.5px}
+.count-group span{display:flex;gap:3px;margin-left:4px}
+.count-dot{width:12px;height:12px;border-radius:50%;border:2px solid #334155;background:transparent}
+.count-dot.filled-ball{background:#4ade80;border-color:#4ade80}
+.count-dot.filled-strike{background:#ef4444;border-color:#ef4444}
+.count-dot.filled-out{background:#f59e0b;border-color:#f59e0b}
+/* Base diamond */
+.diamond-wrap{flex:0 0 110px;display:flex;flex-direction:column;align-items:center;gap:4px}
+.diamond-svg{width:100px;height:100px}
+.on-base-text{font-size:9px;color:var(--muted);text-align:center;line-height:1.4}
+.on-base-text span{color:var(--accent);font-weight:700}
+/* Modal overlay */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;justify-content:center;align-items:center;padding:16px}
+.modal-overlay.show{display:flex}
+.modal-box{background:var(--card);border-radius:var(--radius);padding:20px;max-width:340px;width:100%;text-align:center}
+.modal-box h3{font-size:18px;font-weight:800;margin-bottom:4px}
+.modal-box p{font-size:12px;color:var(--muted);margin-bottom:14px}
+.modal-btns{display:flex;flex-direction:column;gap:8px}
+.modal-btns button{border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;transition:transform .1s}
+.modal-btns button:active{transform:scale(0.96)}
+.modal-cancel{background:var(--card2);color:var(--muted)}
 
 /* Prediction buttons */
 .pred-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;text-align:center}
@@ -331,37 +355,64 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 
   <div class="sit-badges" id="sitBadges"></div>
 
-  <!-- Strike zone — big and centered -->
-  <div class="zone-section">
-    <div class="zone-label">Pitch Tracker</div>
-    <svg class="strike-zone-svg" id="strikeZoneSVG" viewBox="0 0 200 250">
-      <defs>
-        <radialGradient id="grass" cx="50%" cy="55%" r="65%"><stop offset="0%" stop-color="#1a472a"/><stop offset="100%" stop-color="#0d2818"/></radialGradient>
-        <radialGradient id="dirt" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#5c3d2e" stop-opacity="0.2"/><stop offset="100%" stop-color="#5c3d2e" stop-opacity="0"/></radialGradient>
-      </defs>
-      <rect x="0" y="0" width="200" height="250" rx="14" fill="url(#grass)"/>
-      <circle cx="100" cy="125" r="50" fill="url(#dirt)"/>
-      <polygon points="100,30 170,125 100,220 30,125" fill="none" stroke="#5c3d2e" stroke-width="0.8" opacity="0.25"/>
-      <line x1="100" y1="30" x2="170" y2="125" stroke="#5c3d2e" stroke-width="0.5" opacity="0.2"/>
-      <line x1="170" y1="125" x2="100" y2="220" stroke="#5c3d2e" stroke-width="0.5" opacity="0.2"/>
-      <line x1="100" y1="220" x2="30" y2="125" stroke="#5c3d2e" stroke-width="0.5" opacity="0.2"/>
-      <line x1="30" y1="125" x2="100" y2="30" stroke="#5c3d2e" stroke-width="0.5" opacity="0.2"/>
-      <rect x="94" y="23" width="12" height="12" rx="1.5" fill="#d4a574" opacity="0.35" transform="rotate(45,100,29)"/>
-      <rect x="164" y="119" width="12" height="12" rx="1.5" fill="#d4a574" opacity="0.35" transform="rotate(45,170,125)"/>
-      <rect x="24" y="119" width="12" height="12" rx="1.5" fill="#d4a574" opacity="0.35" transform="rotate(45,30,125)"/>
-      <circle cx="100" cy="125" r="7" fill="#5c3d2e" opacity="0.18"/>
-      <rect id="szRect" x="45" y="45" width="110" height="145" rx="2" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.15)" stroke-width="1.5" stroke-dasharray="5,3"/>
-      <line id="szH1" x1="45" y1="93" x2="155" y2="93" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
-      <line id="szH2" x1="45" y1="141" x2="155" y2="141" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
-      <line id="szV1" x1="81" y1="45" x2="81" y2="190" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
-      <line id="szV2" x1="118" y1="45" x2="118" y2="190" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
-      <polygon points="80,232 100,244 120,232 120,226 80,226" fill="#d4a574" opacity="0.4"/>
-      <g id="pitchDots"></g>
-    </svg>
+  <!-- Count indicators (ESPN style) -->
+  <div class="count-row">
+    <div class="count-group">BALLS <span id="ballDots"></span></div>
+    <div class="count-group">STRIKES <span id="strikeDots"></span></div>
+    <div class="count-group">OUTS <span id="outDots"></span></div>
+  </div>
+
+  <!-- Pitch tracker + Base diamond side by side -->
+  <div class="tracker-row">
+    <div class="zone-wrap">
+      <svg class="strike-zone-svg" id="strikeZoneSVG" viewBox="0 0 220 280">
+        <defs><linearGradient id="szBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a2332"/><stop offset="100%" stop-color="#111827"/></linearGradient></defs>
+        <rect x="0" y="0" width="220" height="280" fill="url(#szBg)"/>
+        <!-- Batter silhouette (right-handed) -->
+        <g opacity="0.18" transform="translate(162,60) scale(0.5)">
+          <path d="M30,10 C30,4.5 25,0 20,0 C15,0 10,4.5 10,10 C10,15.5 15,20 20,20 C25,20 30,15.5 30,10Z" fill="#fff"/>
+          <path d="M5,30 L10,22 L20,22 L30,22 L35,30 L32,70 L36,120 L30,122 L24,75 L20,75 L16,75 L10,122 L4,120 L8,70Z" fill="#fff"/>
+          <path d="M2,28 L10,24 L8,15 L-5,5 L-12,12 L-8,20 L-2,22Z" fill="#fff"/>
+          <path d="M35,28 L30,25 L35,40 L38,38Z" fill="#fff"/>
+          <line x1="-12" y1="12" x2="-20" y2="-15" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+        </g>
+        <!-- Strike zone box -->
+        <rect id="szRect" x="40" y="55" width="105" height="140" rx="1" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2"/>
+        <!-- Grid lines -->
+        <line id="szH1" x1="40" y1="101" x2="145" y2="101" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+        <line id="szH2" x1="40" y1="148" x2="145" y2="148" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+        <line id="szV1" x1="75" y1="55" x2="75" y2="195" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+        <line id="szV2" x1="110" y1="55" x2="110" y2="195" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+        <!-- Home plate -->
+        <polygon points="72,255 92,265 112,255 112,250 72,250" fill="#d4a574" opacity="0.3"/>
+        <g id="pitchDots"></g>
+      </svg>
+    </div>
+    <!-- Base runner diamond -->
+    <div class="diamond-wrap">
+      <div class="zone-label">Bases</div>
+      <svg class="diamond-svg" viewBox="0 0 100 100">
+        <rect x="0" y="0" width="100" height="100" rx="12" fill="#111827"/>
+        <!-- Base paths -->
+        <line x1="50" y1="18" x2="82" y2="50" stroke="#334155" stroke-width="1.5"/>
+        <line x1="82" y1="50" x2="50" y2="82" stroke="#334155" stroke-width="1.5"/>
+        <line x1="50" y1="82" x2="18" y2="50" stroke="#334155" stroke-width="1.5"/>
+        <line x1="18" y1="50" x2="50" y2="18" stroke="#334155" stroke-width="1.5"/>
+        <!-- 2B -->
+        <rect id="base2" x="43" y="11" width="14" height="14" rx="2" fill="#334155" transform="rotate(45,50,18)"/>
+        <!-- 1B -->
+        <rect id="base1" x="75" y="43" width="14" height="14" rx="2" fill="#334155" transform="rotate(45,82,50)"/>
+        <!-- 3B -->
+        <rect id="base3" x="11" y="43" width="14" height="14" rx="2" fill="#334155" transform="rotate(45,18,50)"/>
+        <!-- Home -->
+        <polygon points="43,82 50,89 57,82 57,78 43,78" fill="#d4a574" opacity="0.5"/>
+      </svg>
+      <div class="on-base-text" id="onBaseText">No runners</div>
+    </div>
   </div>
 
   <!-- Predictions -->
-  <div class="runners-display" id="runnersDisplay"></div>
+  <div class="runners-display" id="runnersDisplay" style="display:none"></div>
   <div class="pred-label">Your Call</div>
   <div class="pred-grid">
     <button class="pred-btn ball" id="btnBall" disabled>&#9918; Ball<span class="pts" id="ptsBall">5</span></button>
@@ -393,6 +444,19 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   </div>
   <div class="tab-content" id="tabPitchLog"><div id="historyLog"></div></div>
   <div class="tab-content hidden" id="tabScoringSummary"><div id="scoringPlays"></div></div>
+</div>
+
+<!-- ═══ GAME MODE MODAL ═══ -->
+<div class="modal-overlay" id="modeModal">
+  <div class="modal-box">
+    <h3 id="modalTeams">--</h3>
+    <p>How do you want to play?</p>
+    <div class="modal-btns">
+      <button class="btn-solo" id="modalSolo">Solo vs CPU</button>
+      <button class="btn-friends" id="modalFriends">Play with Friends</button>
+      <button class="modal-cancel" id="modalCancel">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -469,17 +533,35 @@ function makeGameCard(g,cls,pickMode){
   </div><div class="gc-meta"><div class="gc-status">${txt}</div></div><div class="gc-arrow">\u203A</div>`;
   card.addEventListener('click',()=>{
     if(pickMode){
-      // Host picking game for room
       mpBroadcast({type:'gameStart',gameId:g.gamePk,away:aw.team.name,home:hm.team.name,awayId:awId,homeId:hmId});
       startGame(g.gamePk,aw.team.name,hm.team.name,awId,hmId);
     }else{
-      startGame(g.gamePk,aw.team.name,hm.team.name,awId,hmId);
+      showModeModal(g.gamePk,aw.team.name,hm.team.name,awId,hmId);
     }
   });
   return card;
 }
 $('refreshGames').addEventListener('click',()=>loadGames());
 $('backBtn').addEventListener('click',()=>{stopGame();showScreen(S.isMultiplayer?'screenLobby':'screenHome');renderHomeLB()});
+
+/* ══════ GAME MODE MODAL ══════ */
+let pendingGame=null;
+function showModeModal(gameId,away,home,awayId,homeId){
+  pendingGame={gameId,away,home,awayId,homeId};
+  $('modalTeams').textContent=away+' vs '+home;
+  $('modeModal').classList.add('show');
+}
+$('modalSolo').addEventListener('click',()=>{
+  $('modeModal').classList.remove('show');
+  if(!pendingGame)return;S.isMultiplayer=false;S.isHost=false;
+  startGame(pendingGame.gameId,pendingGame.away,pendingGame.home,pendingGame.awayId,pendingGame.homeId);
+});
+$('modalFriends').addEventListener('click',()=>{
+  $('modeModal').classList.remove('show');
+  ensureName();showScreen('screenLobby');
+  $('lobbyOptions').style.display='';$('roomDisplay').classList.remove('show');
+});
+$('modalCancel').addEventListener('click',()=>{$('modeModal').classList.remove('show')});
 
 /* ══════════════════════════════════════
    HOME — MODE SELECTION
@@ -645,7 +727,7 @@ function startGame(gameId,away,home,awayId,homeId){
     $('soloScores').style.display='';$('mpScores').style.display='none';
   }
 
-  clearZone();setPred(true);showScreen('screenGame');
+  clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');
   clearInterval(S.fetchInterval);clearInterval(S.queueInterval);
   fetchGame();S.fetchInterval=setInterval(fetchGame,4000);S.queueInterval=setInterval(processQueue,1000);
 }
@@ -701,19 +783,22 @@ function parseGame(d){
     }
   }
 
-  // Count + outs
+  // Count + outs — ESPN dot display
   if(cp&&cp.count){
     const c=cp.count;S.currentCount={balls:c.balls,strikes:c.strikes};S.currentOuts=c.outs;
     $('countDisplay').innerHTML='<span>'+c.balls+'</span>-<span>'+c.strikes+'</span> \u2022 '+c.outs+' out';
     updateDynamicOdds(c.balls,c.strikes);
+    renderCountDots(c.balls,c.strikes,c.outs);
   }
 
-  // Runners
+  // Runners — diamond graphic
   try{
-    const off=ls.offense||{};let r=0;S.runnersOnSecond=!!off.second;S.runnersOnThird=!!off.third;
-    if(off.first)r++;if(off.second)r++;if(off.third)r++;S.runnersOn=r;
-    $('runnersDisplay').textContent=r>0?'\uD83C\uDFC3 '+r+' runner'+(r>1?'s':'')+' on':'';
+    const off=ls.offense||{};let r=0;
+    const r1=!!off.first,r2=!!off.second,r3=!!off.third;
+    S.runnersOnSecond=r2;S.runnersOnThird=r3;
+    if(r1)r++;if(r2)r++;if(r3)r++;S.runnersOn=r;
     $('rbiRow').style.display=r>0?'flex':'none';
+    renderBases(r1,r2,r3,off);
   }catch(e){}
 
   updateSitBadges();
@@ -779,6 +864,27 @@ function updateSitBadges(){
   if(sit.label){el.innerHTML='<span class="sit-badge clutch">'+sit.label+'</span>';return}
   if(!sit.labels||!sit.labels.length){el.innerHTML='';return}
   el.innerHTML=sit.labels.map(l=>'<span class="sit-badge">'+l+'</span>').join('');
+}
+
+/* ══════════════════════════════════════
+   COUNT DOTS + BASE DIAMOND
+   ══════════════════════════════════════ */
+function renderCountDots(balls,strikes,outs){
+  let bh='',sh='',oh='';
+  for(let i=0;i<4;i++)bh+='<span class="count-dot'+(i<balls?' filled-ball':'')+'"></span>';
+  for(let i=0;i<3;i++)sh+='<span class="count-dot'+(i<strikes?' filled-strike':'')+'"></span>';
+  for(let i=0;i<3;i++)oh+='<span class="count-dot'+(i<outs?' filled-out':'')+'"></span>';
+  $('ballDots').innerHTML=bh;$('strikeDots').innerHTML=sh;$('outDots').innerHTML=oh;
+}
+function renderBases(r1,r2,r3,off){
+  $('base1').setAttribute('fill',r1?'#f59e0b':'#334155');
+  $('base2').setAttribute('fill',r2?'#f59e0b':'#334155');
+  $('base3').setAttribute('fill',r3?'#f59e0b':'#334155');
+  let txt='';
+  if(r1)txt+='1B: <span>'+(off.first?off.first.fullName:'Runner')+'</span> ';
+  if(r2)txt+='2B: <span>'+(off.second?off.second.fullName:'Runner')+'</span> ';
+  if(r3)txt+='3B: <span>'+(off.third?off.third.fullName:'Runner')+'</span>';
+  $('onBaseText').innerHTML=txt||'No runners';
 }
 
 /* ══════════════════════════════════════
@@ -929,25 +1035,55 @@ function resolvePitch(p){
 /* ══════════════════════════════════════
    STRIKE ZONE VIZ
    ══════════════════════════════════════ */
-function clearZone(){$('pitchDots').innerHTML='';S.pitchHistory=[]}
+function clearZone(){$('pitchDots').innerHTML='';S.pitchHistory=[];S.pitchCount=0}
 function drawPitch(p){
   if(p.pX===null||p.pZ===null)return;
-  const svgX=100+(p.pX/2)*100,svgY=250-(p.pZ/5)*250;
+  // Map pitch coordinates to SVG: zone is x:40-145, y:55-195
+  // pX range is roughly -2 to 2 feet, pZ is roughly 0 to 5 feet
+  const zoneLeft=40,zoneRight=145,zoneW=zoneRight-zoneLeft;
+  const svgX=zoneLeft+zoneW/2+(p.pX/2.5)*(zoneW/2);
+  // pZ: map strike zone range to SVG zone area
+  const zoneTop=55,zoneBot=195,zoneH=zoneBot-zoneTop;
+  const szMid=(p.szTop+p.szBot)/2,szRange=p.szTop-p.szBot;
+  const svgY=zoneTop+zoneH/2-((p.pZ-szMid)/Math.max(szRange*1.5,2))*zoneH;
+
   let color='#64748b';const cc=p.callCode;
   if(cc==='B')color='#4ade80';else if(cc==='C'||cc==='S'||cc==='T')color='#ef4444';
   else if(cc==='F')color='#f59e0b';else if(cc==='D'||cc==='E'||cc==='X')color='#3b82f6';
+
   const dots=$('pitchDots');
-  dots.querySelectorAll('circle').forEach(c=>{c.setAttribute('opacity',Math.max(0.15,parseFloat(c.getAttribute('opacity')||1)-0.15))});
-  dots.querySelectorAll('text').forEach(t=>{t.setAttribute('opacity',Math.max(0.1,parseFloat(t.getAttribute('opacity')||1)-0.15))});
+  // Fade old dots
+  dots.querySelectorAll('.pdot').forEach(g=>{
+    const op=Math.max(0.2,parseFloat(g.getAttribute('opacity')||1)-0.15);
+    g.setAttribute('opacity',op);
+  });
+
   S.pitchHistory.push({x:svgX,y:svgY,color});
-  if(S.pitchHistory.length>15){S.pitchHistory.shift();if(dots.children.length>=2){dots.removeChild(dots.children[0]);dots.removeChild(dots.children[0])}}
-  const szTop=250-(p.szTop/5)*250,szBot=250-(p.szBot/5)*250,szH=szBot-szTop;
-  $('szRect').setAttribute('y',szTop);$('szRect').setAttribute('height',szH);
-  const t1=szH/3;$('szH1').setAttribute('y1',szTop+t1);$('szH1').setAttribute('y2',szTop+t1);
-  $('szH2').setAttribute('y1',szTop+2*t1);$('szH2').setAttribute('y2',szTop+2*t1);
-  [$('szV1'),$('szV2')].forEach(l=>{l.setAttribute('y1',szTop);l.setAttribute('y2',szBot)});
-  if(p.speed){const txt=document.createElementNS('http://www.w3.org/2000/svg','text');txt.setAttribute('x',svgX);txt.setAttribute('y',svgY+4);txt.setAttribute('text-anchor','middle');txt.setAttribute('font-size','8');txt.setAttribute('font-weight','700');txt.setAttribute('fill','#000');txt.setAttribute('opacity','1');txt.textContent=Math.round(p.speed);dots.appendChild(txt)}
-  const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');circle.setAttribute('cx',svgX);circle.setAttribute('cy',svgY);circle.setAttribute('r','7');circle.setAttribute('fill',color);circle.setAttribute('opacity','1');circle.setAttribute('stroke','#fff');circle.setAttribute('stroke-width','1.5');dots.appendChild(circle);
+  if(!S.pitchCount)S.pitchCount=0;
+  S.pitchCount++;
+  if(S.pitchHistory.length>12){S.pitchHistory.shift();const first=dots.querySelector('.pdot');if(first)first.remove()}
+
+  // Update strike zone position
+  const szTop2=zoneTop+zoneH/2-((p.szTop-szMid)/Math.max(szRange*1.5,2))*zoneH;
+  const szBot2=zoneTop+zoneH/2-((p.szBot-szMid)/Math.max(szRange*1.5,2))*zoneH;
+  const h=szBot2-szTop2;
+  $('szRect').setAttribute('y',szTop2);$('szRect').setAttribute('height',h);
+  const t=h/3;
+  $('szH1').setAttribute('y1',szTop2+t);$('szH1').setAttribute('y2',szTop2+t);
+  $('szH2').setAttribute('y1',szTop2+2*t);$('szH2').setAttribute('y2',szTop2+2*t);
+  [$('szV1'),$('szV2')].forEach(l=>{l.setAttribute('y1',szTop2);l.setAttribute('y2',szBot2)});
+
+  // Draw numbered circle (ESPN style)
+  const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+  g.setAttribute('class','pdot');g.setAttribute('opacity','1');
+  const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  circle.setAttribute('cx',svgX);circle.setAttribute('cy',svgY);circle.setAttribute('r','10');
+  circle.setAttribute('fill',color);circle.setAttribute('stroke','#fff');circle.setAttribute('stroke-width','1.5');
+  const num=document.createElementNS('http://www.w3.org/2000/svg','text');
+  num.setAttribute('x',svgX);num.setAttribute('y',svgY+4);num.setAttribute('text-anchor','middle');
+  num.setAttribute('font-size','9');num.setAttribute('font-weight','800');num.setAttribute('fill','#fff');
+  num.textContent=S.pitchCount;
+  g.appendChild(circle);g.appendChild(num);dots.appendChild(g);
 }
 
 /* ══════════════════════════════════════
