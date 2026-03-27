@@ -194,7 +194,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .ab-btn.go{background:linear-gradient(135deg,#1e3a5f,#1e40af)}.ab-btn.fo{background:linear-gradient(135deg,#1e3a5f,#1e40af)}
 .ab-btn.s1{background:linear-gradient(135deg,#4c1d95,#5b21b6)}.ab-btn.s2{background:linear-gradient(135deg,#5b21b6,#6d28d9)}
 .ab-btn.s3{background:linear-gradient(135deg,#6d28d9,#7c3aed)}.ab-btn.hr{background:linear-gradient(135deg,#9f1239,#be123c)}
-.ab-btn.sel{outline:3px solid var(--accent);outline-offset:-1px;box-shadow:0 0 12px rgba(245,158,11,0.4)}
+.ab-btn.sel,.ab-btn.sel:disabled{outline:3px solid var(--accent);outline-offset:-1px;box-shadow:0 0 12px rgba(245,158,11,0.4);opacity:1!important;filter:brightness(1.2)}
 .atbat-locked-msg{display:none;text-align:center;padding:8px;font-size:14px;font-weight:700;color:var(--accent)}
 .atbat-card.locked .atbat-grid{display:none}.atbat-card.locked .atbat-locked-msg{display:block}
 .atbat-result{display:none;border-radius:10px;padding:10px 12px;text-align:center;font-weight:700;font-size:14px;margin-top:-4px;transition:all .3s}
@@ -250,7 +250,8 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .pred-btn{border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:transform .1s;min-height:42px;position:relative;overflow:hidden;padding:5px 2px}
 .pred-btn .pts{font-size:9px;font-weight:600;opacity:0.7}
 .pred-btn:active:not(:disabled){transform:scale(0.94)}.pred-btn:disabled{opacity:0.25;cursor:default}
-.pred-btn.sel{outline:3px solid var(--accent);outline-offset:-1px;box-shadow:0 0 10px rgba(245,158,11,0.4)}
+.pred-btn.sel,.pred-btn.sel:disabled{outline:3px solid var(--accent);outline-offset:-1px;box-shadow:0 0 12px rgba(245,158,11,0.5);opacity:1!important;filter:brightness(1.2)}
+.pred-btn.locked,.pred-btn.locked:disabled{opacity:1!important;outline:3px solid #4ade80;outline-offset:-1px;box-shadow:0 0 14px rgba(74,222,128,0.5);filter:brightness(1.3)}
 .pred-btn.ball{background:linear-gradient(135deg,#166534,#15803d);color:#4ade80}
 .pred-btn.strike{background:linear-gradient(135deg,#7f1d1d,#991b1b);color:#fca5a5}
 .pred-btn.foul{background:linear-gradient(135deg,#713f12,#854d0e);color:#fcd34d}
@@ -1504,6 +1505,7 @@ function processQueue(){
    PITCH-BY-PITCH PREDICTIONS
    ══════════════════════════════════════ */
 let pitchLocked=false,pitchLockTimer=null;
+const pitchBtnIdMap={Ball:'btnBall',Strike:'btnStrike',Foul:'btnFoul',Out:'btnOut',Hit:'btnHit',Homer:'btnHomer',Single:'btnHit',Double:'btnHit',Triple:'btnHit'};
 $('btnBall').addEventListener('click',()=>predict('Ball'));
 $('btnStrike').addEventListener('click',()=>predict('Strike'));
 $('btnFoul').addEventListener('click',()=>predict('Foul'));
@@ -1537,6 +1539,11 @@ function lockPitchPick(){
   if(!S.userPick||pitchLocked)return;
   pitchLocked=true;
   setPred(false);
+  // Visual: highlight selected button with green locked state
+  document.querySelectorAll('.pred-btn').forEach(b=>{
+    b.classList.remove('sel');
+    if(b.id===pitchBtnIdMap[S.userPick]){b.classList.add('locked');b.style.opacity='1'}
+  });
   // Lock pitch type buttons
   document.querySelectorAll('.ptype-btn').forEach(b=>{b.style.pointerEvents='none';b.style.opacity='0.4'});
   // Lock at-bat card too if already picked
@@ -1550,7 +1557,7 @@ function lockPitchPick(){
     S.pitchTypeCPU=Math.random()<0.5?'Fastball':Math.random()<0.8?'Breaking':'Offspeed';
   }
   const lbl=S.userPick+(S.rbiPick?' +RBI':'')+(S.pitchTypePick?' ('+S.pitchTypePick+')':'');
-  $('statusBar').textContent='\uD83D\uDD12 Pitch: '+lbl+' \u2014 locked!';$('statusBar').className='status-bar';
+  $('statusBar').textContent='\uD83D\uDD12 Pitch: '+lbl+' — LOCKED';$('statusBar').className='status-bar correct';
   updateReadyIndicators();
 }
 function startPitchLockCountdown(){
@@ -1566,7 +1573,8 @@ function startPitchLockCountdown(){
 }
 function resetPitchState(){
   pitchLocked=false;if(pitchLockTimer){clearInterval(pitchLockTimer);pitchLockTimer=null}
-  document.querySelectorAll('.pred-btn').forEach(b=>b.classList.remove('sel'));
+  if(autoPickTimer){clearTimeout(autoPickTimer);autoPickTimer=null}
+  document.querySelectorAll('.pred-btn').forEach(b=>{b.classList.remove('sel');b.classList.remove('locked');b.style.opacity=''});
   // Unlock pitch type buttons
   document.querySelectorAll('.ptype-btn').forEach(b=>{b.style.pointerEvents='';b.style.opacity=''});
   // Reset ready indicators
@@ -2055,6 +2063,7 @@ function updatePctlInfo(){
 }
 
 // Ready state tracking
+let autoPickTimer=null;let autoPickCountdown=0;let autoPickInterval=null;
 function updateReadyIndicators(){
   const hasPitch=!!S.userPick&&pitchLocked;
   const hasAB=abState==='locked'||abState==='result';
@@ -2067,7 +2076,6 @@ function updateReadyIndicators(){
   // CPU is always ready in solo (picks instantly)
   const cpuEl=$('cpuReady');
   if(cpuEl&&!S.isMultiplayer){
-    const cpuHasPick=!!S.cpuPick||!S.gameActive;
     cpuEl.textContent=youReady?'✅':'⏳';
     cpuEl.className='sc-ready '+(youReady?'done':'waiting');
   }
@@ -2076,23 +2084,29 @@ function updateReadyIndicators(){
   if(wm){
     if(!youReady&&S.gameActive&&practiceWaiting){
       const needPitch=!hasPitch,needAB=!hasAB;
-      if(needPitch&&needAB)wm.textContent='Pick your at-bat and pitch call to continue';
-      else if(needAB)wm.textContent='Pitch locked ✅ — now pick at-bat outcome';
-      else wm.textContent='At-bat locked ✅ — now pick pitch call';
+      let msg='';
+      if(needPitch&&needAB)msg='Pick at-bat + pitch call to continue';
+      else if(needAB)msg='Pitch locked ✅ — now pick at-bat outcome';
+      else msg='At-bat locked ✅ — now pick pitch call';
+      if(autoPickCountdown>0)msg+=' (auto-skip in '+autoPickCountdown+'s)';
+      wm.textContent=msg;
       wm.style.display='';
     }else{wm.style.display='none'}
   }
   return youReady;
 }
 
-// Auto-advance in manual mode when both picks are locked
+// Auto-advance when both picks are locked — works for ALL modes
 function practiceAutoCheck(){
-  if(!practiceWaiting||practiceSpeed!==0)return;
+  if(!practiceWaiting)return;
   const hasPitch=!!S.userPick&&pitchLocked;
   const hasAB=abState==='locked'||abState==='result';
   updateReadyIndicators();
   if(hasPitch&&hasAB){
-    // Both locked — auto-advance after 1.5 seconds
+    // Both locked — cancel any auto-skip timer and advance
+    if(autoPickTimer){clearTimeout(autoPickTimer);autoPickTimer=null}
+    if(autoPickInterval){clearInterval(autoPickInterval);autoPickInterval=null}
+    autoPickCountdown=0;
     $('statusBar').textContent='\u2705 Both picks locked — here it comes!';$('statusBar').className='status-bar correct';
     $('waitingMsg').style.display='none';
     practiceWaiting=false;
@@ -2100,7 +2114,7 @@ function practiceAutoCheck(){
   }else if(hasPitch||hasAB){
     $('statusBar').textContent='\uD83C\uDFAF '+(hasPitch?'Pitch locked — pick at-bat to continue':'At-bat locked — pick pitch to continue');$('statusBar').className='status-bar';
   }else{
-    setTimeout(()=>{if(practiceWaiting){$('statusBar').textContent='\uD83C\uDFAF Make both picks to continue';$('statusBar').className='status-bar'}},2500);
+    setTimeout(()=>{if(practiceWaiting&&!S.userPick&&abState!=='locked'){$('statusBar').textContent='\uD83C\uDFAF Make both picks to continue';$('statusBar').className='status-bar'}},2500);
   }
 }
 
@@ -2395,12 +2409,28 @@ function practiceNextPitch(){
         if(abState!=='locked'&&abState!=='result'){
           document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=false);
         }
-        if(practiceSpeed===0){
-          practiceWaiting=true;$('pctlNext').disabled=false;
-          practiceAutoCheck();
-        }else{
-          practiceTimer=setTimeout(practiceNextPitch,practiceSpeed);
+        // ALL modes wait for both picks before advancing
+        practiceWaiting=true;
+        $('pctlNext').disabled=false;
+        // Start 20-second auto-skip timer for Auto/Fast modes
+        if(practiceSpeed>0){
+          autoPickCountdown=20;
+          updateReadyIndicators();
+          autoPickInterval=setInterval(()=>{
+            autoPickCountdown--;
+            updateReadyIndicators();
+            if(autoPickCountdown<=0){
+              clearInterval(autoPickInterval);autoPickInterval=null;
+              // Time's up — skip without picks
+              if(practiceWaiting){
+                practiceWaiting=false;
+                $('statusBar').textContent='\u23E9 Time\u2019s up — skipping pitch (no prediction)';$('statusBar').className='status-bar wrong';
+                practiceTimer=setTimeout(practiceNextPitch,1000);
+              }
+            }
+          },1000);
         }
+        practiceAutoCheck();
       }
     }
   },800);
@@ -2410,7 +2440,7 @@ function practiceNextPitch(){
 const origBackHandler=$('backBtn').onclick;
 $('backBtn').addEventListener('click',()=>{
   if(practiceMode){
-    practiceMode=false;practiceWaiting=false;if(practiceTimer)clearTimeout(practiceTimer);
+    practiceMode=false;practiceWaiting=false;if(practiceTimer)clearTimeout(practiceTimer);if(autoPickTimer)clearTimeout(autoPickTimer);if(autoPickInterval)clearInterval(autoPickInterval);autoPickCountdown=0;
     $('practiceBadge').classList.remove('show');$('practiceSpeed').classList.remove('show');
     $('practiceControls').classList.remove('show');$('pctlInnings').classList.remove('show');
     document.querySelector('.delay-bar').style.display='';
