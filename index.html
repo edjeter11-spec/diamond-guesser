@@ -298,6 +298,26 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .sp-score{font-weight:700;color:var(--accent);min-width:40px;text-align:right}
 .sp-desc{flex:1;color:var(--text)}
 
+/* League scores ticker */
+.league-ticker{background:var(--card);border-radius:var(--radius);padding:8px 10px;margin-top:4px}
+.league-ticker h4{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px}
+.ticker-games{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.ticker-games::-webkit-scrollbar{height:2px}.ticker-games::-webkit-scrollbar-thumb{background:#334155}
+.ticker-game{flex-shrink:0;background:var(--card2);border-radius:8px;padding:6px 10px;min-width:120px;font-size:10px}
+.ticker-game.tg-live{border-left:2px solid var(--red)}
+.tg-row{display:flex;justify-content:space-between;gap:8px;padding:1px 0}
+.tg-team{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px}
+.tg-score{font-weight:800;min-width:14px;text-align:right}
+.tg-status{font-size:9px;color:var(--muted);text-align:center;margin-top:2px}
+.tg-status.live{color:var(--red)}
+/* Game session leaderboard at bottom */
+.game-lb{background:var(--card);border-radius:var(--radius);padding:10px 12px;margin-top:4px}
+.game-lb h4{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px}
+.glb-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:12px}
+.glb-row .glb-rank{color:var(--muted);min-width:24px;font-weight:700}
+.glb-row .glb-name{flex:1}
+.glb-row .glb-pts{font-weight:700;color:var(--accent);min-width:40px;text-align:right}
+
 .skeleton{background:linear-gradient(90deg,var(--card) 25%,var(--card2) 50%,var(--card) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:var(--radius);height:60px}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
@@ -378,7 +398,10 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     <div class="room-code-box"><div class="room-code-label">Room Code</div><div class="room-code-val" id="roomCodeVal">----</div><div class="room-code-share">Share this code with friends</div></div>
     <div class="room-players"><h4>Players</h4><div class="rp-list" id="rpList"></div></div>
     <div class="room-status" id="roomStatus">Waiting for players...</div>
-    <div class="room-game-pick" id="roomGamePick"><h4>Pick a Game</h4><div id="roomGamesList"></div></div>
+    <div class="room-game-pick" id="roomGamePick"><h4>Pick a Game</h4><div id="roomGamesList"></div>
+      <div style="text-align:center;padding:8px 0"><span style="color:var(--muted);font-size:11px">— or —</span></div>
+      <button class="auth-btn btn-practice" id="btnMPPractice" style="width:100%">&#127891; Practice Together (Simulated Game)</button>
+    </div>
   </div>
 </div>
 
@@ -546,6 +569,18 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   </div>
   <div class="tab-content" id="tabPitchLog"><div id="historyLog"></div></div>
   <div class="tab-content hidden" id="tabScoringSummary"><div id="scoringPlays"></div></div>
+
+  <!-- Game session leaderboard -->
+  <div class="game-lb" id="gameLB">
+    <h4>&#127942; Session Leaderboard</h4>
+    <div id="gameLBList"></div>
+  </div>
+
+  <!-- League scores ticker -->
+  <div class="league-ticker" id="leagueTicker">
+    <h4>&#9918; Scores Around the League</h4>
+    <div class="ticker-games" id="tickerGames"></div>
+  </div>
 </div>
 
 <!-- END GAME SUMMARY -->
@@ -829,6 +864,7 @@ $('joinRoomBtn').addEventListener('click',async()=>{
     const g=snap.val();if(g&&g.gameId&&!S.gameActive)startGame(g.gameId,g.away,g.home,g.awayId,g.homeId);
   });
   $('roomStatus').textContent='Connected! Waiting for host to pick a game...';
+  setupPracticeListener();
 });
 
 function mpSendScore(){
@@ -891,12 +927,12 @@ function startGame(gameId,away,home,awayId,homeId){
   if(S.isMultiplayer){$('soloScores').style.display='none';$('mpScores').style.display='';mpSendScore()}
   else{$('soloScores').style.display='';$('mpScores').style.display='none'}
 
-  clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');
+  clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');startTicker();renderGameLB();
   feedBuffer=[];
   clearInterval(S.fetchInterval);clearInterval(S.queueInterval);
   fetchLoop();S.queueInterval=setInterval(processQueue,300);
 }
-function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}}
+function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);stopTicker();if(S.userScore>0){saveLB();saveUserStats()}}
 
 /* ══════════════════════════════════════
    FETCH + DELAYED FEED
@@ -1207,7 +1243,7 @@ function lockPitchPick(){
     S.pitchTypeCPU=Math.random()<0.5?'Fastball':Math.random()<0.8?'Breaking':'Offspeed';
   }
   const lbl=S.userPick+(S.rbiPick?' +RBI':'')+(S.pitchTypePick?' ('+S.pitchTypePick+')':'');
-  $('statusBar').textContent='\uD83D\uDD12 '+lbl+' \u2014 locked!';$('statusBar').className='status-bar';
+  $('statusBar').textContent='\uD83D\uDD12 Pitch: '+lbl+' \u2014 locked!';$('statusBar').className='status-bar';
   playSound('correct');
 }
 function startPitchLockCountdown(){
@@ -1254,7 +1290,7 @@ function abLock(){
   abState='locked';
   if(!S.isMultiplayer){const r=Math.random()*100;S.atBatCPU=r<25?'Strikeout':r<35?'Walk':r<50?'Groundout':r<65?'Flyout':r<80?'Single':r<90?'Double':r<95?'Triple':'Home Run'}
   $('atbatCard').classList.add('locked');
-  $('atbatLockedMsg').textContent='\uD83D\uDD12 '+S.atBatPick+(S.atBatRbiPick?' + RBI':'');
+  $('atbatLockedMsg').textContent='\uD83D\uDD12 At-Bat: '+S.atBatPick+(S.atBatRbiPick?' + RBI':'');
   document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
   if(navigator.vibrate)navigator.vibrate([30,20,30]);
 }
@@ -1382,7 +1418,7 @@ function resolvePitch(p){
   }
 
   $('yourScore').textContent=S.userScore;updateStreakUI();
-  addHistory(p,uPts);mpSendScore();
+  addHistory(p,uPts);mpSendScore();renderGameLB();
   // Update count dots from this pitch's count
   renderCountDots(p.countBalls,p.countStrikes,p.countOuts);
   // Auto-clear zone on ball in play (D=in play, E=in play+runs, X=in play+out)
@@ -1594,7 +1630,8 @@ function showEndGame(){
 let practiceMode=false,practicePitches=[],practiceIdx=0,practiceTimer=null,practiceSpeed=5000;
 let practiceGameData=null;
 
-$('btnPractice').addEventListener('click',startPractice);
+$('btnPractice').addEventListener('click',()=>startPractice(false));
+$('btnMPPractice').addEventListener('click',()=>startPractice(true));
 
 // Speed buttons
 document.querySelectorAll('.practice-speed button').forEach(btn=>{
@@ -1607,8 +1644,9 @@ document.querySelectorAll('.practice-speed button').forEach(btn=>{
   });
 });
 
-async function startPractice(){
-  $('btnPractice').textContent='Loading game...';
+async function startPractice(isMP){
+  const btn=isMP?$('btnMPPractice'):$('btnPractice');
+  btn.textContent='Loading game...';
   try{
     // Find yesterday's games to get a completed one
     const d=new Date();d.setDate(d.getDate()-1);
@@ -1672,29 +1710,113 @@ async function startPractice(){
       }
     }
 
-    if(!practicePitches.length){$('btnPractice').textContent='No pitch data found';return}
+    if(!practicePitches.length){btn.textContent='No pitch data found';return}
 
     // Start the practice game
     practiceMode=true;
-    S.isMultiplayer=false;S.isHost=false;
+    if(isMP){S.isMultiplayer=true}else{S.isMultiplayer=false;S.isHost=false}
     startGame(gamePk,away,home,awayId,homeId);
     // Override: disable live fetch, enable practice UI
     clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
     S.gameActive=true;
     $('practiceBadge').classList.add('show');
     $('practiceSpeed').classList.add('show');
-    // Hide the delay bar in practice mode
     document.querySelector('.delay-bar').style.display='none';
     $('gameTime').textContent='\uD83C\uDFAC Replay: '+away+' vs '+home+' ('+ds+')';
     $('statusBar').textContent='\uD83C\uDFAF Practice! Make your prediction...';
     setPred(true);
-    // Start feeding pitches
-    practiceTimer=setTimeout(practiceNextPitch,practiceSpeed);
+
+    if(isMP&&roomRef){
+      // Host: broadcast game info and control pitch timing via Firebase
+      roomRef.child('practice').set({away,home,awayId,homeId,gamePk,date:ds,totalPitches:practicePitches.length,currentIdx:0});
+      // Host drives the pitch timer
+      practiceTimer=setTimeout(practiceNextPitchMP,practiceSpeed);
+    }else{
+      // Solo practice
+      practiceTimer=setTimeout(practiceNextPitch,practiceSpeed);
+    }
   }catch(e){
-    $('btnPractice').textContent='Error loading — try again';
+    btn.textContent='Error loading \u2014 try again';
     console.error(e);
   }
-  $('btnPractice').textContent='\uD83C\uDF93 Practice Mode \u2014 Learn How to Play';
+  btn.textContent=isMP?'\uD83C\uDF93 Practice Together (Simulated Game)':'\uD83C\uDF93 Practice Mode \u2014 Learn How to Play';
+}
+
+// MP practice: host advances the pitch index in Firebase
+function practiceNextPitchMP(){
+  if(!S.gameActive||!practiceMode||practiceIdx>=practicePitches.length){
+    if(practiceIdx>=practicePitches.length){
+      S.gameActive=false;if(S.userScore>0){saveLB();saveUserStats()}
+      setTimeout(showEndGame,1500);
+    }
+    return;
+  }
+  // Advance locally
+  practiceNextPitch();
+  // Tell Firebase current index so clients can verify sync
+  if(roomRef)roomRef.child('practice/currentIdx').set(practiceIdx);
+  // Schedule next
+  if(practiceIdx<practicePitches.length){
+    practiceTimer=setTimeout(practiceNextPitchMP,practiceSpeed);
+  }
+}
+
+// Clients joining MP practice: listen for game data and fetch their own copy
+if(typeof roomRef!=='undefined'){
+  // This gets set up when joining a room — we add a practice listener
+}
+function setupPracticeListener(){
+  if(!roomRef)return;
+  roomRef.child('practice').on('value',async snap=>{
+    const prac=snap.val();
+    if(!prac||!prac.gamePk||practiceMode)return;
+    // Client: fetch the same game and start practice
+    try{
+      const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+prac.gamePk+'/feed/live');
+      const gd=await r.json();
+      practicePitches=[];practiceIdx=0;
+      const allPlays=gd.liveData.plays.allPlays||[];
+      for(let p=0;p<allPlays.length;p++){
+        const play=allPlays[p];const events=play.playEvents||[];
+        const batter=play.matchup&&play.matchup.batter?play.matchup.batter:{};
+        const pitcher=play.matchup&&play.matchup.pitcher?play.matchup.pitcher:{};
+        const inning=play.about?play.about.inning:0;const half=play.about?play.about.halfInning:'';
+        const isComplete=play.about?play.about.isComplete:false;
+        const playResult=play.result?play.result.event:'';const playRbi=play.result?play.result.rbi||0:0;
+        for(let e=0;e<events.length;e++){
+          const ev=events[e];if(!ev.isPitch)continue;
+          practicePitches.push({pitchNum:ev.pitchNumber,desc:ev.details?ev.details.description:'?',
+            callCode:ev.details&&ev.details.call?ev.details.call.code:'',typeCode:ev.details&&ev.details.type?ev.details.type.code:'',
+            typeDesc:ev.details&&ev.details.type?ev.details.type.description:'',
+            pX:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pX:null,
+            pZ:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pZ:null,
+            szTop:ev.pitchData?ev.pitchData.strikeZoneTop||3.5:3.5,szBot:ev.pitchData?ev.pitchData.strikeZoneBottom||1.5:1.5,
+            speed:ev.pitchData?ev.pitchData.startSpeed:null,
+            count:ev.count?ev.count.balls+'-'+ev.count.strikes:'',countBalls:ev.count?ev.count.balls:0,
+            countStrikes:ev.count?ev.count.strikes:0,countOuts:ev.count?ev.count.outs:0,
+            playResult,playRbi,batterName:batter.fullName||'',batterId:batter.id||0,
+            pitcherName:pitcher.fullName||'',pitcherId:pitcher.id||0,inning,half,
+            isLastPitchOfAB:e===events.length-1&&isComplete,abResult:isComplete?playResult:'',abRbi:playRbi});
+        }
+      }
+      practiceMode=true;
+      startGame(prac.gamePk,prac.away,prac.home,prac.awayId,prac.homeId);
+      clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);S.gameActive=true;
+      $('practiceBadge').classList.add('show');$('practiceSpeed').classList.remove('show');// clients don't control speed
+      document.querySelector('.delay-bar').style.display='none';
+      $('gameTime').textContent='\uD83C\uDFAC Replay: '+prac.away+' vs '+prac.home+' ('+prac.date+')';
+      setPred(true);
+      // Client: listen for pitch index changes from host
+      roomRef.child('practice/currentIdx').on('value',idxSnap=>{
+        const targetIdx=idxSnap.val();
+        if(targetIdx===null||targetIdx===undefined)return;
+        // Catch up to host's current pitch
+        while(practiceIdx<targetIdx&&practiceIdx<practicePitches.length){
+          practiceNextPitch();
+        }
+      });
+    }catch(e){console.error('Practice join error:',e)}
+  });
 }
 
 function practiceNextPitch(){
@@ -1761,6 +1883,54 @@ $('backBtn').addEventListener('click',()=>{
     document.querySelector('.delay-bar').style.display='';
   }
 });
+
+/* ══════════════════════════════════════
+   LEAGUE SCORES TICKER
+   ══════════════════════════════════════ */
+let tickerInterval=null;
+function startTicker(){
+  loadTicker();tickerInterval=setInterval(loadTicker,30000);// refresh every 30s
+}
+function stopTicker(){if(tickerInterval){clearInterval(tickerInterval);tickerInterval=null}}
+async function loadTicker(){
+  try{
+    const d=new Date(),ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const r=await fetch('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+ds+'&hydrate=linescore');
+    const data=await r.json();const games=(data.dates&&data.dates[0]&&data.dates[0].games)||[];
+    const el=$('tickerGames');
+    if(!games.length){el.innerHTML='<span style="color:var(--muted);font-size:11px">No games today</span>';return}
+    el.innerHTML=games.filter(g=>g.gamePk!==S.gameId).map(g=>{
+      const aw=g.teams.away,hm=g.teams.home,ls=g.linescore||{};
+      const st=g.status.abstractGameState;const det=g.status.detailedState;
+      const isLive=st==='Live';const inn=ls.currentInning||'';const half=ls.inningHalf||'';
+      let status=det;if(isLive&&inn)status=(half==='Top'?'\u25B2':'\u25BC')+inn;
+      const awAbr=aw.team.name.split(' ').pop();const hmAbr=hm.team.name.split(' ').pop();
+      return`<div class="ticker-game${isLive?' tg-live':''}"><div class="tg-row"><span class="tg-team">${awAbr}</span><span class="tg-score">${aw.score!=null?aw.score:'-'}</span></div><div class="tg-row"><span class="tg-team">${hmAbr}</span><span class="tg-score">${hm.score!=null?hm.score:'-'}</span></div><div class="tg-status${isLive?' live':''}">${status}</div></div>`;
+    }).join('');
+  }catch(e){}
+}
+
+/* ══════════════════════════════════════
+   SESSION LEADERBOARD
+   ══════════════════════════════════════ */
+function renderGameLB(){
+  const el=$('gameLBList');
+  if(S.isMultiplayer){
+    const sorted=Object.entries(S.mpPlayers).map(([id,p])=>({...p,id})).sort((a,b)=>b.score-a.score);
+    el.innerHTML=sorted.map((p,i)=>{
+      const medal=i===0?'\uD83E\uDD47':i===1?'\uD83E\uDD48':i===2?'\uD83E\uDD49':'';
+      const isMe=p.id===S.playerId;
+      return`<div class="glb-row"${isMe?' style="color:var(--accent2)"':''}><span class="glb-rank">${medal||(i+1)+'.'}</span><span class="glb-name">${p.name}${isMe?' (You)':''}</span><span class="glb-pts">${p.score||0}</span></div>`;
+    }).join('');
+  }else{
+    const you=S.userScore,cpu=S.cpuScore;
+    const rows=[{n:S.playerName||'You',s:you,me:true},{n:'CPU',s:cpu,me:false}].sort((a,b)=>b.s-a.s);
+    el.innerHTML=rows.map((r,i)=>{
+      const medal=i===0?'\uD83E\uDD47':'\uD83E\uDD48';
+      return`<div class="glb-row"${r.me?' style="color:var(--accent2)"':''}><span class="glb-rank">${medal}</span><span class="glb-name">${r.n}</span><span class="glb-pts">${r.s}</span></div>`;
+    }).join('');
+  }
+}
 
 /* ══════════════════════════════════════
    DYNAMIC BACKGROUND
