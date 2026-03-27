@@ -69,6 +69,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .pctl-next:disabled{opacity:0.3}
 .pctl-sm{background:var(--card2);color:var(--muted);font-size:10px;padding:6px 8px}
 .pctl-sm:active{background:#334155}
+.pctl-end{background:#7f1d1d;color:#fca5a5}.pctl-end:active{background:#991b1b}
 .pctl-info{font-size:10px;color:var(--muted);text-align:center;flex-shrink:0}
 .pctl-inning-row{display:none;gap:4px;flex-wrap:wrap;justify-content:center;background:var(--card);border-radius:var(--radius);padding:6px 10px}
 .pctl-inning-row.show{display:flex}
@@ -461,6 +462,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     <span class="pctl-info" id="pctlInfo">0/0</span>
     <button class="pctl-btn pctl-sm" id="pctlSkip" title="Skip to inning">&#9197; Skip</button>
   </div>
+  <button class="pctl-btn pctl-sm pctl-end" id="pctlEnd" title="End game &amp; save" style="display:none">&#9724; End Game</button>
   <div class="pctl-inning-row" id="pctlInnings"></div>
 
   <!-- Solo scores -->
@@ -2025,7 +2027,7 @@ function updateStreakUI(){
 /* ══════════════════════════════════════
    END-OF-GAME SUMMARY
    ══════════════════════════════════════ */
-$('egClose').addEventListener('click',()=>{$('endgameOverlay').classList.remove('show');showScreen('screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString()});
+$('egClose').addEventListener('click',()=>{$('endgameOverlay').classList.remove('show');showScreen('screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString();$('pctlEnd').style.display='none';practiceMode=false});
 function showEndGame(){
   const total=S.totalPredictions||0;const correct=S.correctCount||0;
   $('egScore').textContent=S.userScore;
@@ -2088,6 +2090,21 @@ $('pctlRewind').addEventListener('click',()=>{
     if(p.batterId)S.lastBatterId=0;// force matchup refresh
     practiceNextPitch();
   }
+});
+
+// End game button — finishes sim and shows summary
+$('pctlEnd').addEventListener('click',()=>{
+  if(!practiceMode||!S.gameActive)return;
+  if(!confirm('End game now and save your score?'))return;
+  // Stop everything
+  S.gameActive=false;practiceWaiting=false;
+  if(practiceTimer){clearTimeout(practiceTimer);practiceTimer=null}
+  if(autoPickInterval){clearInterval(autoPickInterval);autoPickInterval=null}
+  if(autoPickTimer){clearTimeout(autoPickTimer);autoPickTimer=null}
+  // Save scores
+  if(S.userScore>0){saveLB();saveUserStats()}
+  // Show end game summary
+  setTimeout(showEndGame,500);
 });
 
 // Skip to inning
@@ -2281,6 +2298,7 @@ async function startPractice(isMP){
     S.gameActive=true;
     $('practiceBadge').classList.add('show');
     $('practiceSpeed').classList.add('show');
+    $('pctlEnd').style.display='inline-block';
     $('practiceControls').classList.toggle('show',practiceSpeed===0);
     document.querySelector('.delay-bar').style.display='none';
     $('gameTime').textContent='\uD83C\uDFAC Replay: '+away+' vs '+home+' ('+ds+')';
