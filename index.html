@@ -2181,7 +2181,8 @@ function updateReadyIndicators(){
 function practiceAutoCheck(){
   if(!practiceWaiting)return;
   const hasPitch=!!S.userPick&&pitchLocked;
-  const hasAB=abState==='locked'||abState==='result';
+  // Only count at-bat as ready if actively locked for THIS batter, not a stale result
+  const hasAB=abState==='locked';
   updateReadyIndicators();
   if(hasPitch&&hasAB){
     // Both locked — cancel any auto-skip timer and advance
@@ -2236,6 +2237,9 @@ async function startPractice(isMP){
       const playResult=play.result?play.result.event:'';
       const playRbi=play.result?play.result.rbi||0:0;
 
+      // Find the index of the last pitch event in this at-bat
+      let lastPitchIdx=-1;
+      for(let e=events.length-1;e>=0;e--){if(events[e].isPitch){lastPitchIdx=e;break}}
       for(let e=0;e<events.length;e++){
         const ev=events[e];
         if(!ev.isPitch)continue;
@@ -2259,12 +2263,13 @@ async function startPractice(isMP){
           batterName:batter.fullName||'',batterId:batter.id||0,
           pitcherName:pitcher.fullName||'',pitcherId:pitcher.id||0,
           inning:inning,half:half,
-          isLastPitchOfAB:e===events.length-1&&isComplete,
+          isLastPitchOfAB:e===lastPitchIdx&&isComplete,
           abResult:isComplete?playResult:'',abRbi:playRbi
         });
       }
     }
 
+    console.log('Practice: loaded '+practicePitches.length+' pitches from '+allPlays.length+' at-bats');
     if(!practicePitches.length){btn.textContent='No pitch data found';return}
 
     // Start the practice game
