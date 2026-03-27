@@ -668,21 +668,56 @@ function startGame(gameId,away,home,awayId,homeId){
   else{$('soloScores').style.display='';$('mpScores').style.display='none'}
 
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');
+  feedBuffer=[];
   clearInterval(S.fetchInterval);clearInterval(S.queueInterval);
   fetchGame();S.fetchInterval=setInterval(fetchGame,4000);S.queueInterval=setInterval(processQueue,1000);
 }
 function stopGame(){S.gameActive=false;clearInterval(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0)saveLB()}
 
 /* ══════════════════════════════════════
-   FETCH + PARSE
+   FETCH + DELAYED FEED
    ══════════════════════════════════════ */
+// Buffer entire API responses — only apply after TV delay
+let feedBuffer=[];
 async function fetchGame(){
   if(!S.gameActive)return;
-  try{const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+S.gameId+'/feed/live');if(!r.ok)throw new Error(r.status);parseGame(await r.json())}
-  catch(e){$('statusBar').textContent='\u26A0 API error \u2014 retrying...'}
+  try{
+    const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+S.gameId+'/feed/live');
+    if(!r.ok)throw new Error(r.status);
+    const d=await r.json();
+    feedBuffer.push({data:d,time:Date.now()/1000});
+    // Extract pitches immediately for the delay queue (but don't show results)
+    extractPitches(d);
+  }catch(e){$('statusBar').textContent='\u26A0 API error \u2014 retrying...'}
+}
+// Pull pitch events from feed without updating UI
+function extractPitches(d){
+  if(!d||!d.liveData)return;
+  const cp=d.liveData.plays&&d.liveData.plays.currentPlay;
+  if(!cp)return;
+  const events=cp.playEvents;if(!events||!events.length)return;
+  for(let i=0;i<events.length;i++){
+    const ev=events[i];if(!ev.isPitch)continue;const pn=ev.pitchNumber;if(pn<=S.lastPitchNum)continue;
+    S.lastPitchNum=pn;
+    const pr=cp.result?cp.result.event||'':'';const rbi=cp.result?cp.result.rbi||0:0;
+    S.pendingPitches.push({pitchNum:pn,time:Date.now()/1000,
+      desc:ev.details?ev.details.description:'?',
+      callCode:ev.details&&ev.details.call?ev.details.call.code:'',
+      typeCode:ev.details&&ev.details.type?ev.details.type.code:'',
+      typeDesc:ev.details&&ev.details.type?ev.details.type.description:'',
+      pX:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pX:null,
+      pZ:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pZ:null,
+      szTop:ev.pitchData?ev.pitchData.strikeZoneTop||3.5:3.5,szBot:ev.pitchData?ev.pitchData.strikeZoneBottom||1.5:1.5,
+      speed:ev.pitchData?ev.pitchData.startSpeed:null,
+      count:ev.count?ev.count.balls+'-'+ev.count.strikes:'',
+      countBalls:ev.count?ev.count.balls:0,countStrikes:ev.count?ev.count.strikes:0,countOuts:ev.count?ev.count.outs:0,
+      playResult:pr,playRbi:rbi});
+    if(!S.userPick)$('statusBar').textContent='\uD83D\uDCE1 Pitch incoming \u2014 make your call!';
+  }
 }
 
-function parseGame(d){
+// Apply a delayed game feed snapshot to the UI (everything EXCEPT pitches)
+function applyDelayedFeed(d){
   if(!d||!d.liveData)return;
   const ls=d.liveData.linescore||{},inning=ls.currentInning||0,half=ls.inningHalf||'';
   S.currentInning=inning;
@@ -713,22 +748,14 @@ function parseGame(d){
     const batterId=cp.matchup.batter?cp.matchup.batter.id:0;
     if(batterId&&batterId!==S.lastBatterId){
       S.lastBatterId=batterId;S.atBatPick='';S.atBatCPU='';S.atBatResolved=false;S.atBatRbiPick=false;
-      S.lastPitchNum=0;S.currentCount={balls:0,strikes:0};
+      S.currentCount={balls:0,strikes:0};
       $('atbatCard').classList.remove('locked');$('atbatLockedMsg').textContent='';
       document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
       $('rbiRowAB').style.display=S.runnersOn>0?'flex':'none';$('rbiToggleAB').classList.remove('on');
       clearZone();renderCountDots(0,0,S.currentOuts);
       updateDynamicOdds(0,0);
-      $('statusBar').textContent='\uD83C\uDFAF New batter — make your call!';$('statusBar').className='status-bar';
+      $('statusBar').textContent='\uD83C\uDFAF New batter \u2014 make your call!';$('statusBar').className='status-bar';
     }
-  }
-
-  // Count + outs
-  if(cp&&cp.count){
-    const c=cp.count;S.currentCount={balls:c.balls,strikes:c.strikes};S.currentOuts=c.outs;
-    $('countDisplay').innerHTML='<span>'+c.balls+'</span>-<span>'+c.strikes+'</span> \u2022 '+c.outs+' out';
-    updateDynamicOdds(c.balls,c.strikes);
-    renderCountDots(c.balls,c.strikes,c.outs);
   }
 
   // Runners
@@ -747,27 +774,6 @@ function parseGame(d){
 
   // At-bat result
   if(cp&&cp.about&&cp.about.isComplete&&cp.result&&cp.result.event&&!S.atBatResolved)resolveAtBat(cp.result.event,cp.result.rbi||0);
-
-  // Pitch events
-  const events=cp&&cp.playEvents;if(!events||!events.length)return;
-  for(let i=0;i<events.length;i++){
-    const ev=events[i];if(!ev.isPitch)continue;const pn=ev.pitchNumber;if(pn<=S.lastPitchNum)continue;
-    S.lastPitchNum=pn;
-    const pr=cp.result?cp.result.event||'':'';const rbi=cp.result?cp.result.rbi||0:0;
-    S.pendingPitches.push({pitchNum:pn,time:Date.now()/1000,
-      desc:ev.details?ev.details.description:'?',
-      callCode:ev.details&&ev.details.call?ev.details.call.code:'',
-      typeCode:ev.details&&ev.details.type?ev.details.type.code:'',
-      typeDesc:ev.details&&ev.details.type?ev.details.type.description:'',
-      pX:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pX:null,
-      pZ:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pZ:null,
-      szTop:ev.pitchData?ev.pitchData.strikeZoneTop||3.5:3.5,szBot:ev.pitchData?ev.pitchData.strikeZoneBottom||1.5:1.5,
-      speed:ev.pitchData?ev.pitchData.startSpeed:null,
-      count:ev.count?ev.count.balls+'-'+ev.count.strikes:'',
-      countBalls:ev.count?ev.count.balls:0,countStrikes:ev.count?ev.count.strikes:0,countOuts:ev.count?ev.count.outs:0,
-      playResult:pr,playRbi:rbi});
-    $('statusBar').textContent='\uD83D\uDCE1 Pitch #'+pn+' \u2014 syncing to TV...';$('statusBar').className='status-bar';
-  }
 }
 
 /* ══════════════════════════════════════
@@ -843,6 +849,14 @@ function renderBases(r1,r2,r3,off){
    ══════════════════════════════════════ */
 function processQueue(){
   if(!S.gameActive)return;const delay=parseInt($('delaySlider').value),now=Date.now()/1000;
+  // Apply delayed feed snapshots (scoreboard, matchup, bases, inning — everything visible)
+  let lastReady=null;
+  feedBuffer=feedBuffer.filter(f=>{
+    if(now-f.time>=delay){lastReady=f.data;return false}
+    return true;
+  });
+  if(lastReady)applyDelayedFeed(lastReady);
+  // Apply delayed pitches
   S.pendingPitches=S.pendingPitches.filter(p=>{if(now-p.time>=delay){resolvePitch(p);return false}return true});
 }
 $('delaySlider').addEventListener('input',e=>{$('delayVal').textContent=e.target.value+'s'});
