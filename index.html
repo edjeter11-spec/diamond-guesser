@@ -394,7 +394,6 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     <button class="btn-solo" id="btnSoloMode">Solo vs CPU</button>
     <button class="btn-friends" id="btnFriendsMode">Play with Friends</button>
   </div>
-  <button class="auth-btn btn-practice" id="btnPractice" style="width:100%;margin:-4px 0 4px">&#127891; Practice Mode — Learn How to Play</button>
   <div class="game-list">
     <div class="game-list-header"><h2>Today's Games</h2><button class="refresh-btn" id="refreshGames">Refresh</button></div>
     <div id="gamesList"></div>
@@ -620,7 +619,20 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   </div>
 </div>
 
-<!-- GAME MODE MODAL -->
+<!-- SOLO MODE MODAL -->
+<div class="modal-overlay" id="soloModal">
+  <div class="modal-box">
+    <h3>&#9918; Solo vs CPU</h3>
+    <p>Choose how you want to play</p>
+    <div class="modal-btns">
+      <button class="btn-solo" id="soloLive">&#128308; Play Live Game</button>
+      <button class="btn-practice" id="soloSim">&#127891; Play Simulation</button>
+      <button class="modal-cancel" id="soloCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- GAME MODE MODAL (from game card click) -->
 <div class="modal-overlay" id="modeModal">
   <div class="modal-box">
     <h3 id="modalTeams">--</h3>
@@ -823,7 +835,17 @@ $('modalFriends').addEventListener('click',()=>{
 $('modalCancel').addEventListener('click',()=>{$('modeModal').classList.remove('show')});
 
 /* HOME MODE */
-$('btnSoloMode').addEventListener('click',()=>{S.isMultiplayer=false;S.isHost=false});
+$('btnSoloMode').addEventListener('click',()=>{$('soloModal').classList.add('show')});
+$('soloLive').addEventListener('click',()=>{
+  $('soloModal').classList.remove('show');S.isMultiplayer=false;S.isHost=false;
+  // Scroll to game list
+  document.querySelector('.game-list').scrollIntoView({behavior:'smooth'});
+});
+$('soloSim').addEventListener('click',()=>{
+  $('soloModal').classList.remove('show');S.isMultiplayer=false;S.isHost=false;
+  startPractice(false);
+});
+$('soloCancel').addEventListener('click',()=>{$('soloModal').classList.remove('show')});
 $('btnFriendsMode').addEventListener('click',()=>{ensureName();showScreen('screenLobby');$('lobbyOptions').style.display='';$('roomDisplay').classList.remove('show')});
 $('lobbyBackBtn').addEventListener('click',()=>{mpDisconnect();showScreen('screenHome')});
 
@@ -1010,7 +1032,7 @@ function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterv
 /* ══════════════════════════════════════
    MULTIPLAYER SYNC — Host drives everything
    ══════════════════════════════════════ */
-let mpCountdownTimer=null;let mpPendingPitch=null;
+let mpCountdownTimer=null;let mpPendingPitch=null;let mpCountdownActive=false;let mpLastCountdownTime=0;
 
 // HOST: fetch API, broadcast state, wait for ready, resolve
 function mpHostStart(){
@@ -1030,6 +1052,8 @@ function mpHostStart(){
 
 async function mpHostFetch(){
   if(!S.gameActive||!S.isMultiplayer)return;
+  // Don't fetch while waiting for players to pick
+  if(mpPendingPitch){S.fetchInterval=setTimeout(mpHostFetch,2000);return}
   try{
     const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+S.gameId+'/feed/live?fields=gameData,datetime,firstPitch,dateTime,status,detailedState,teams,away,home,name,abbreviation,id,liveData,linescore,currentInning,inningHalf,inningState,teams,away,home,runs,offense,first,second,third,fullName,batter,onDeck,inHole,defense,pitcher,plays,currentPlay,matchup,pitcher,batter,fullName,id,count,balls,strikes,outs,about,isComplete,inning,halfInning,result,event,eventType,description,rbi,awayScore,homeScore,isScoringPlay,playEvents,isPitch,pitchNumber,details,description,call,code,type,code,description,pitchData,coordinates,pX,pZ,strikeZoneTop,strikeZoneBottom,startSpeed,allPlays,scoringPlays');
     if(!r.ok)throw new Error(r.status);
@@ -1177,8 +1201,12 @@ function mpApplyGameState(gs){
 
 // Shared: synced countdown then resolve
 function mpRunCountdown(pitch){
+  // Guard: don't fire twice for the same countdown
+  if(mpCountdownActive)return;
+  mpCountdownActive=true;
   setPred(false);
   if(S.userPick&&!pitchLocked)lockPitchPick();
+  if(navigator.vibrate)navigator.vibrate([100,50,100]);
   let sec=3;
   $('statusBar').textContent='\u23F0 Pitch reveal in '+sec+'...';$('statusBar').className='status-bar';
   if(mpCountdownTimer)clearInterval(mpCountdownTimer);
@@ -1186,12 +1214,14 @@ function mpRunCountdown(pitch){
     sec--;
     if(sec<=0){
       clearInterval(mpCountdownTimer);mpCountdownTimer=null;
+      mpCountdownActive=false;
       // Resolve for everyone at the same time
       resolvePitch(pitch);
       if(pitch.isComplete&&pitch.abResult&&!S.atBatResolved)resolveAtBat(pitch.abResult,pitch.abRbi||0);
       // Clear countdown from Firebase so it doesn't re-trigger
-      if(S.isHost&&roomRef)roomRef.child('countdown').remove();
-      if(S.isHost&&roomRef)roomRef.child('pendingPitch').remove();
+      if(S.isHost&&roomRef){roomRef.child('countdown').remove();roomRef.child('pendingPitch').remove()}
+      // Re-enable picks for next pitch after a beat
+      setTimeout(()=>{if(S.gameActive&&!S.gamePaused){setPred(true);resetPitchState()}},2000);
     }else{
       $('statusBar').textContent='\u23F0 Pitch reveal in '+sec+'...';
     }
@@ -1922,7 +1952,7 @@ let practiceMode=false,practicePitches=[],practiceIdx=0,practiceTimer=null,pract
 let practiceWaiting=false;// true when waiting for user to click Next
 let practiceGameData=null;
 
-$('btnPractice').addEventListener('click',()=>startPractice(false));
+// btnPractice removed — solo sim triggered from soloSim button
 $('btnMPPractice').addEventListener('click',()=>startPractice(true));
 
 // Speed/mode buttons
@@ -2022,7 +2052,7 @@ function practiceAutoCheck(){
 }
 
 async function startPractice(isMP){
-  const btn=isMP?$('btnMPPractice'):$('btnPractice');
+  const btn=isMP?$('btnMPPractice'):$('soloSim');
   btn.textContent='Loading game...';
   try{
     // Find yesterday's games to get a completed one
@@ -2032,7 +2062,7 @@ async function startPractice(isMP){
     const sched=await r.json();
     const games=(sched.dates&&sched.dates[0]&&sched.dates[0].games)||[];
     const final=games.filter(g=>g.status.abstractGameState==='Final');
-    if(!final.length){$('btnPractice').textContent='No completed games found — try again';return}
+    if(!final.length){btn.textContent='No completed games found';return}
     // Pick a random completed game
     const game=final[Math.floor(Math.random()*final.length)];
     const gamePk=game.gamePk;
