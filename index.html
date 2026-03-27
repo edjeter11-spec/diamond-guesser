@@ -1546,17 +1546,22 @@ document.querySelectorAll('.ptype-btn').forEach(btn=>{
 
 function predict(choice){
   if(pitchLocked||!S.gameActive)return;
-  // Allow changing pick — editable until locked
   S.userPick=choice;$('hitSub').classList.remove('open');
   // Highlight selected button
   document.querySelectorAll('.pred-btn').forEach(b=>b.classList.remove('sel'));
   const btnMap={Ball:'btnBall',Strike:'btnStrike',Foul:'btnFoul',Out:'btnOut',Homer:'btnHomer',Single:'btnHit',Double:'btnHit',Triple:'btnHit'};
   if(btnMap[choice])$(btnMap[choice]).classList.add('sel');
-  // Show pitch type row
+  if(navigator.vibrate)navigator.vibrate(20);
+  // In practice/sim mode: if at-bat is already locked, instantly lock pitch + start countdown
+  const hasAB=abState==='locked'||abState==='result';
+  if(practiceMode&&hasAB){
+    lockPitchPick();
+    return;
+  }
+  // In live mode or if at-bat not yet locked: show pitch type row and wait
   $('ptypeRow').classList.add('open');
   const lbl=choice+(S.rbiPick?' +RBI':'');
   $('statusBar').textContent='\uD83C\uDFAF '+lbl+' selected \u2014 change anytime or pick pitch type';$('statusBar').className='status-bar';
-  if(navigator.vibrate)navigator.vibrate(20);
 }
 function lockPitchPick(){
   if(!S.userPick||pitchLocked)return;
@@ -1635,7 +1640,14 @@ document.querySelectorAll('.ab-btn').forEach(btn=>{
 function abLock(){
   if(!S.atBatPick||abState==='locked')return;
   abState='locked';
-  if(!S.isMultiplayer){const r=Math.random()*100;S.atBatCPU=r<25?'Strikeout':r<35?'Walk':r<50?'Groundout':r<65?'Flyout':r<80?'Single':r<90?'Double':r<95?'Triple':'Home Run'}
+  if(!S.isMultiplayer){
+    const r=Math.random()*100;S.atBatCPU=r<25?'Strikeout':r<35?'Walk':r<50?'Groundout':r<65?'Flyout':r<80?'Single':r<90?'Double':r<95?'Triple':'Home Run';
+    // CPU also makes pitch pick immediately so checkmark shows
+    const r2=Math.random()*100;
+    S.cpuPick=r2<38?'Ball':r2<55?'Strike':r2<73?'Foul':r2<83?'Out':r2<90?(Math.random()<0.65?'Single':Math.random()<0.9?'Double':'Triple'):'Homer';
+    S.rbiPickCPU=S.runnersOn>0&&Math.random()<0.4;
+    S.pitchTypeCPU=Math.random()<0.5?'Fastball':Math.random()<0.8?'Breaking':'Offspeed';
+  }
   $('atbatCard').classList.add('locked');
   $('atbatLockedMsg').textContent='\uD83D\uDD12 At-Bat: '+S.atBatPick+(S.atBatRbiPick?' + RBI':'');
   document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
