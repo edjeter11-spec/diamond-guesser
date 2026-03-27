@@ -1497,6 +1497,10 @@ function lockPitchPick(){
   if(!S.userPick||pitchLocked)return;
   pitchLocked=true;
   setPred(false);
+  // Lock pitch type buttons
+  document.querySelectorAll('.ptype-btn').forEach(b=>{b.style.pointerEvents='none';b.style.opacity='0.4'});
+  // Lock at-bat card too if already picked
+  if(abState==='locked'){document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true)}
   if(practiceMode)practiceAutoCheck();
   mpCheckReady();
   if(!S.isMultiplayer){
@@ -1506,8 +1510,7 @@ function lockPitchPick(){
     S.pitchTypeCPU=Math.random()<0.5?'Fastball':Math.random()<0.8?'Breaking':'Offspeed';
   }
   const lbl=S.userPick+(S.rbiPick?' +RBI':'')+(S.pitchTypePick?' ('+S.pitchTypePick+')':'');
-  $('statusBar').textContent='\uD83D\uDD12 Pitch: '+lbl+' \u2014 locked!';$('statusBar').className='status-bar';
-  playSound('correct');
+  $('statusBar').textContent='\uD83D\uDD12 Pitch: '+lbl+' \u2014 locked! Waiting for result...';$('statusBar').className='status-bar';
 }
 function startPitchLockCountdown(){
   if(pitchLocked||!S.userPick)return;
@@ -1523,6 +1526,8 @@ function startPitchLockCountdown(){
 function resetPitchState(){
   pitchLocked=false;if(pitchLockTimer){clearInterval(pitchLockTimer);pitchLockTimer=null}
   document.querySelectorAll('.pred-btn').forEach(b=>b.classList.remove('sel'));
+  // Unlock pitch type buttons
+  document.querySelectorAll('.ptype-btn').forEach(b=>{b.style.pointerEvents='';b.style.opacity=''});
 }
 function setPred(on){
   ['btnBall','btnStrike','btnFoul','btnOut','btnHit','btnHomer'].forEach(id=>{$(id).disabled=!on});
