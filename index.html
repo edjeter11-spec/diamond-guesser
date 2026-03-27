@@ -826,6 +826,7 @@ function applyDelayedFeed(d){
       });
     }else{battersHTML='<span style="color:var(--muted);font-size:11px">Waiting for lineup...</span>'}
     $('ibBatters').innerHTML=battersHTML;
+    inInningBreak=true;
     $('inningBreak').classList.add('show');
     $('matchupBar').style.display='none';
     // Keep predictions enabled during break — editable until locked
@@ -841,6 +842,7 @@ function applyDelayedFeed(d){
     }
     $('statusBar').textContent=breakLabel+' \u2014 predict the next at-bat now!';$('statusBar').className='status-bar paused';
   }else{
+    inInningBreak=false;
     $('inningBreak').classList.remove('show');
     $('matchupBar').style.display='';
     if(!S.atBatPick)document.querySelector('.atbat-card-header span').textContent='\uD83C\uDFAF Predict the At-Bat';
@@ -1062,15 +1064,20 @@ function setPred(on){
    AT-BAT PREDICTION (PRIMARY)
    ══════════════════════════════════════ */
 $('rbiToggleAB').addEventListener('click',()=>{S.atBatRbiPick=!S.atBatRbiPick;$('rbiToggleAB').classList.toggle('on')});
-let atBatLockTimer=null;let atBatLocked=false;
+let atBatLockTimer=null;let atBatLocked=false;let inInningBreak=false;
 document.querySelectorAll('.ab-btn').forEach(btn=>{
   btn.addEventListener('click',()=>{
     if(atBatLocked||!S.gameActive)return;
-    // Allow changing pick before lock
     S.atBatPick=btn.dataset.ab;
     document.querySelectorAll('.ab-btn').forEach(b=>b.classList.remove('sel'));btn.classList.add('sel');
-    $('atbatLockedMsg').textContent='';$('atbatCard').classList.remove('locked');
     if(navigator.vibrate)navigator.vibrate(20);
+    if(inInningBreak){
+      // During break — editable, just highlight
+      $('atbatLockedMsg').textContent='';$('atbatCard').classList.remove('locked');
+    }else{
+      // Mid-at-bat — lock immediately so you can't cheat
+      lockAtBatPick();
+    }
   });
 });
 function lockAtBatPick(){
