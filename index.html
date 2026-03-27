@@ -888,9 +888,12 @@ $('joinRoomBtn').addEventListener('click',async()=>{
   setupPracticeListener();
 });
 
-function mpSendScore(){
+function mpSendScore(pick,got){
   if(!S.isMultiplayer||!roomRef)return;
-  roomRef.child('players/'+S.playerId).update({score:S.userScore,streak:S.streak});
+  const upd={score:S.userScore,streak:S.streak};
+  if(pick!==undefined)upd.lastPick=pick||'';
+  if(got!==undefined)upd.lastGot=got;// true/false/null
+  roomRef.child('players/'+S.playerId).update(upd);
 }
 function mpDisconnect(){
   if(roomRef){
@@ -937,7 +940,12 @@ function renderMPScores(){
   $('mpScoresList').innerHTML=sorted.map((p,i)=>{
     const medal=i===0?'\uD83E\uDD47 ':i===1?'\uD83E\uDD48 ':i===2?'\uD83E\uDD49 ':'';
     const isMe=p.id===S.playerId;
-    return`<div class="mp-row${isMe?' me':''}">${medal}<span class="mp-name">${p.name}</span><span class="mp-streak">${p.streak||0}\uD83D\uDD25</span><span class="mp-pts">${p.score||0}</span></div>`;
+    let pickTag='';
+    if(p.lastPick){
+      const icon=p.lastGot===true?'\u2705':p.lastGot===false?'\u274C':'';
+      pickTag=`<span style="font-size:9px;color:${p.lastGot?'#4ade80':'#f87171'};margin-left:4px">${icon}${p.lastPick}</span>`;
+    }
+    return`<div class="mp-row${isMe?' me':''}">${medal}<span class="mp-name">${p.name}${pickTag}</span><span class="mp-pts">${p.score||0}</span></div>`;
   }).join('');
 }
 
@@ -1404,7 +1412,7 @@ function resolveAtBat(event,rbi){
     abResult.textContent=(got?'\u2705 ':'\u274C ')+ev+(got?' \u2014 +'+uPts+' pts!':' \u2014 +0');
     if(got){playSound(ev==='Home Run'?'homer':'correct');if(ev==='Home Run')triggerConfetti()}else{playSound('wrong');triggerShake()}
   }
-  mpSendScore();
+  mpSendScore(S.atBatPick?'AB:'+S.atBatPick:null,S.atBatPick?uPts>0:null);
   // Card stays in 'result' state until new batter is detected by API
 }
 
@@ -1463,7 +1471,7 @@ function resolvePitch(p){
   }
 
   $('yourScore').textContent=S.userScore;updateStreakUI();
-  addHistory(p,uPts);mpSendScore();renderGameLB();
+  addHistory(p,uPts);mpSendScore(S.userPick||null,S.userPick?uPts>0:null);renderGameLB();
   // Update count dots from this pitch's count
   renderCountDots(p.countBalls,p.countStrikes,p.countOuts);
   // Auto-clear zone on ball in play (D=in play, E=in play+runs, X=in play+out)
