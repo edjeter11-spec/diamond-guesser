@@ -118,6 +118,15 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .matchup-bar .vs{color:var(--muted);margin:0 4px;font-size:12px}
 .count-display{font-size:12px;color:var(--muted);margin-top:2px}
 .count-display span{font-weight:700;color:var(--text)}
+/* Inning break / due up */
+.inning-break{background:linear-gradient(135deg,#1e293b,#0f172a);border-radius:var(--radius);padding:12px;text-align:center;border:1px solid #334155;display:none}
+.inning-break.show{display:block}
+.inning-break .ib-inning{font-size:15px;font-weight:800;color:var(--accent);margin-bottom:6px}
+.inning-break .ib-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px}
+.inning-break .ib-batters{display:flex;justify-content:center;gap:12px}
+.inning-break .ib-batter{display:flex;flex-direction:column;align-items:center;gap:3px}
+.inning-break .ib-batter img{width:36px;height:36px;border-radius:50%;border:2px solid #334155;background:var(--card2);object-fit:cover}
+.inning-break .ib-batter span{font-size:10px;font-weight:600;color:var(--text);max-width:70px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* AT-BAT PRIMARY — big prominent card */
 .atbat-card{background:linear-gradient(135deg,#1e293b,#0f172a);border-radius:var(--radius);padding:12px;border:2px solid #334155;position:relative}
@@ -310,7 +319,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   <div class="mp-scores" id="mpScores" style="display:none"><h4>Leaderboard</h4><div id="mpScoresList"></div></div>
 
   <div class="halftime-alert" id="halftimeAlert"><h3 id="htTitle"></h3><p id="htBody"></p></div>
-  <div class="matchup-bar">
+  <div class="matchup-bar" id="matchupBar">
     <img class="matchup-img" id="pitcherImg" src="" alt="">
     <div class="matchup-info">
       <span class="pitcher" id="pitcherName">&#8212;</span>
@@ -319,6 +328,13 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
       <div class="count-display" id="countDisplay"></div>
     </div>
     <img class="matchup-img" id="batterImg" src="" alt="">
+  </div>
+
+  <!-- INNING BREAK / DUE UP -->
+  <div class="inning-break" id="inningBreak">
+    <div class="ib-inning" id="ibInning"></div>
+    <div class="ib-label">Due Up</div>
+    <div class="ib-batters" id="ibBatters"></div>
   </div>
 
   <!-- AT-BAT PRIMARY -->
@@ -693,6 +709,7 @@ function startGame(gameId,away,home,awayId,homeId){
   $('atbatCard').classList.remove('locked');$('atbatLockedMsg').textContent='';
   document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
   $('hitSub').classList.remove('open');$('pitchOddsLabel').textContent='';
+  $('inningBreak').classList.remove('show');$('matchupBar').style.display='';
 
   if(S.isMultiplayer){$('soloScores').style.display='none';$('mpScores').style.display='';mpSendScore()}
   else{$('soloScores').style.display='';$('mpScores').style.display='none'}
@@ -759,9 +776,66 @@ function applyDelayedFeed(d){
   if(isPaused&&!S.gamePaused){S.gamePaused=true;setPred(false);$('statusBar').textContent='\u23F8\uFE0F '+detState;$('statusBar').className='status-bar paused'}
   else if(!isPaused&&S.gamePaused){S.gamePaused=false;setPred(true);$('statusBar').textContent='\uD83C\uDFAF Make your call!';$('statusBar').className='status-bar'}
 
+  const inningState=ls.inningState||'';
   const arrow=half==='Top'?'\u25B2':'\u25BC';
   $('inningBadge').textContent=arrow+' '+ordinal(inning);
   try{$('awayScore').textContent=ls.teams.away.runs||0;$('homeScore').textContent=ls.teams.home.runs||0}catch(e){}
+
+  // Inning break detection
+  const isBreak=inningState==='Middle'||inningState==='End';
+  if(isBreak&&inning>0){
+    let breakLabel='';
+    if(inningState==='Middle')breakLabel='\u23F8 Middle of the '+ordinal(inning);
+    else breakLabel='\u23F8 End of the '+ordinal(inning);
+    $('ibInning').textContent=breakLabel;
+    // Due up batters — pull from linescore offense
+    let dueUp=[];
+    try{
+      const off=ls.offense||{};
+      // The API sometimes gives battingOrder for next half
+      if(off.batter)dueUp.push(off.batter);
+      if(off.onDeck)dueUp.push(off.onDeck);
+      if(off.inHole)dueUp.push(off.inHole);
+    }catch(e){}
+    if(!dueUp.length){
+      // Try from the other team's batting order for next half
+      try{
+        const def=ls.defense||{};
+        // During middle/end the "offense" flips — check both
+        if(!dueUp.length&&def.batter)dueUp.push(def.batter);
+        if(def.onDeck)dueUp.push(def.onDeck);
+        if(def.inHole)dueUp.push(def.inHole);
+      }catch(e){}
+    }
+    let battersHTML='';
+    if(dueUp.length){
+      dueUp.forEach(b=>{
+        const img=b.id?'https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+b.id+'/headshot/67/current':'';
+        const name=b.fullName||'TBD';
+        const lastName=name.split(' ').pop();
+        battersHTML+='<div class="ib-batter"><img src="'+img+'" onerror="this.style.display=\'none\'" alt=""><span>'+lastName+'</span></div>';
+      });
+    }else{battersHTML='<span style="color:var(--muted);font-size:11px">Waiting for lineup...</span>'}
+    $('ibBatters').innerHTML=battersHTML;
+    $('inningBreak').classList.add('show');
+    $('matchupBar').style.display='none';
+    // Keep pitch predictions disabled during break but allow at-bat predictions
+    setPred(false);
+    // Pre-load the due-up batter into the at-bat card so you can predict early
+    if(dueUp.length&&dueUp[0].fullName){
+      const nextBatter=dueUp[0].fullName;
+      if(!S.atBatPick){
+        $('atbatCard').classList.remove('locked');$('atbatLockedMsg').textContent='';
+        document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
+        document.querySelector('.atbat-card-header span').textContent='\u26A1 Predict: '+nextBatter+"'s At-Bat";
+      }
+    }
+    $('statusBar').textContent=breakLabel+' \u2014 predict the next at-bat now!';$('statusBar').className='status-bar paused';
+  }else{
+    $('inningBreak').classList.remove('show');
+    $('matchupBar').style.display='';
+    if(!S.atBatPick)document.querySelector('.atbat-card-header span').textContent='\uD83C\uDFAF Predict the At-Bat';
+  }
 
   // Game time
   try{const dt=d.gameData.datetime;const fp=dt.firstPitch||dt.dateTime;if(fp){const t=new Date(fp);const now=new Date();const diff=t-now;if(diff>0){const mins=Math.floor(diff/60000);$('gameTime').textContent='\u23F0 First pitch in '+mins+' min';$('statusBar').textContent='\uD83C\uDFDF Game starts in '+mins+' minutes...';setPred(false)}else{const h=t.getHours(),m=t.getMinutes();$('gameTime').textContent='\u23F0 Started '+(h>12?h-12:h)+':'+String(m).padStart(2,'0')+(h>=12?' PM':' AM')}}}catch(e){}
