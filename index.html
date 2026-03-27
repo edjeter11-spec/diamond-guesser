@@ -883,8 +883,32 @@ function renderRoomPlayers(){
   const el=$('rpList');const players=S.mpPlayers;
   el.innerHTML=Object.entries(players).map(([id,p])=>{
     const isMe=id===S.playerId;
-    return`<div class="rp-item"><span class="rp-name">${p.name}</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}${isMe?'<span class="rp-badge">YOU</span>':''}</div>`;
+    if(isMe){
+      return`<div class="rp-item"><span class="rp-name" id="myRoomName" style="cursor:pointer;border-bottom:1px dashed #475569" title="Tap to edit">${p.name}</span><span class="rp-badge">YOU</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}<span style="font-size:9px;color:var(--muted);margin-left:auto">&#9998;</span></div>`;
+    }
+    return`<div class="rp-item"><span class="rp-name">${p.name}</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}</div>`;
   }).join('');
+  // Make own name editable
+  const myName=$('myRoomName');
+  if(myName){
+    myName.addEventListener('click',()=>{
+      const cur=myName.textContent;
+      const input=document.createElement('input');
+      input.className='auth-input';input.value=cur;input.style.cssText='margin:0;padding:6px 8px;font-size:13px;width:100%';
+      input.maxLength=20;
+      myName.replaceWith(input);input.focus();input.select();
+      const save=()=>{
+        const newName=input.value.trim()||'Player';
+        S.playerName=newName;localStorage.setItem('dg_name',newName);
+        if(roomRef)roomRef.child('players/'+S.playerId+'/name').set(newName);
+        if(currentUser&&!currentUser.isAnonymous)currentUser.updateProfile({displayName:newName}).catch(()=>{});
+        if(currentUser)db.ref('users/'+currentUser.uid+'/name').set(newName);
+        $('balName').textContent=newName;
+      };
+      input.addEventListener('blur',save);
+      input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur()}});
+    });
+  }
 }
 function renderMPScores(){
   if(!S.isMultiplayer)return;
@@ -1614,10 +1638,10 @@ function updateStreakUI(){
    ══════════════════════════════════════ */
 $('egClose').addEventListener('click',()=>{$('endgameOverlay').classList.remove('show');showScreen('screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString()});
 function showEndGame(){
-  const total=S.pitchCount||0;const correct=S.correctCount||0;
+  const total=S.totalPredictions||0;const correct=S.correctCount||0;
   $('egScore').textContent=S.userScore;
   $('egStreak').textContent=S.bestStreak+'\uD83D\uDD25';
-  $('egPitches').textContent=total;
+  $('egPitches').textContent=S.pitchCount||0;
   $('egAccuracy').textContent=total>0?Math.round(correct/total*100)+'%':'--';
   $('egSubtitle').textContent=S.awayTeam+' vs '+S.homeTeam;
   $('endgameOverlay').classList.add('show');
