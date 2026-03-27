@@ -420,7 +420,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   </div>
   <div class="game-time" id="gameTime"></div>
   <div class="practice-badge" id="practiceBadge">&#127891; Practice Mode — Simulated Game</div>
-  <div class="practice-speed" id="practiceSpeed">&#9654; Speed: <button class="active" data-spd="5000">Normal</button><button data-spd="2500">Fast</button><button data-spd="1000">Turbo</button></div>
+  <div class="practice-speed" id="practiceSpeed">&#9654; Speed: <button data-spd="15000">Slow</button><button class="active" data-spd="10000">Normal</button><button data-spd="5000">Fast</button><button data-spd="2000">Turbo</button></div>
 
   <!-- Solo scores -->
   <div class="scores-row" id="soloScores">
@@ -1627,7 +1627,7 @@ function showEndGame(){
 /* ══════════════════════════════════════
    PRACTICE MODE — Simulated replay
    ══════════════════════════════════════ */
-let practiceMode=false,practicePitches=[],practiceIdx=0,practiceTimer=null,practiceSpeed=5000;
+let practiceMode=false,practicePitches=[],practiceIdx=0,practiceTimer=null,practiceSpeed=10000;
 let practiceGameData=null;
 
 $('btnPractice').addEventListener('click',()=>startPractice(false));
