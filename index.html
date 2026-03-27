@@ -584,6 +584,10 @@ const auth=firebase.auth();
 let roomRef=null,roomListener=null;
 let currentUser=null,userBalance=0;
 
+const $=id=>document.getElementById(id);
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active')}
+function teamLogo(id){return'https://www.mlbstatic.com/team-logos/'+id+'.svg'}
+
 /* ══════════════════════════════════════
    AUTH — Login / Signup / Guest
    ══════════════════════════════════════ */
@@ -682,10 +686,6 @@ const S={gameId:null,gameActive:false,userScore:0,cpuScore:0,streak:0,bestStreak
   playerId:localStorage.getItem('dg_pid')||(()=>{const id=Math.random().toString(36).slice(2,10);localStorage.setItem('dg_pid',id);return id})(),
   leaderboard:JSON.parse(localStorage.getItem('dg_lb')||'[]'),
   isMultiplayer:false,isHost:false,roomCode:'',mpPlayers:{}};
-
-const $=id=>document.getElementById(id);
-function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active')}
-function teamLogo(id){return'https://www.mlbstatic.com/team-logos/'+id+'.svg'}
 
 /* ══════════════════════════════════════
    TABS
