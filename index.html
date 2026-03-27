@@ -146,6 +146,10 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .ab-btn.sel{outline:3px solid var(--accent);outline-offset:-1px;box-shadow:0 0 12px rgba(245,158,11,0.4)}
 .atbat-locked-msg{display:none;text-align:center;padding:8px;font-size:14px;font-weight:700;color:var(--accent)}
 .atbat-card.locked .atbat-grid{display:none}.atbat-card.locked .atbat-locked-msg{display:block}
+.atbat-result{display:none;border-radius:10px;padding:10px 12px;text-align:center;font-weight:700;font-size:14px;margin-top:-4px;transition:all .3s}
+.atbat-result.show{display:block}
+.atbat-result.correct{background:#166534;color:#4ade80}
+.atbat-result.wrong{background:#7f1d1d;color:#fca5a5}
 .rbi-row{display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 0 2px}
 .rbi-toggle{width:36px;height:20px;border-radius:10px;background:#334155;border:none;cursor:pointer;position:relative;transition:background .2s}
 .rbi-toggle.on{background:var(--accent)}.rbi-toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}.rbi-toggle.on::after{left:18px}
@@ -354,6 +358,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     <div class="rbi-row" id="rbiRowAB" style="display:none"><span class="rbi-label">Predict RBI?</span><button class="rbi-toggle" id="rbiToggleAB"></button><span class="rbi-label">+40 bonus</span></div>
     <div class="atbat-locked-msg" id="atbatLockedMsg"></div>
   </div>
+  <div class="atbat-result" id="atbatResult"></div>
 
   <div class="sit-badges" id="sitBadges"></div>
 
@@ -712,6 +717,7 @@ function startGame(gameId,away,home,awayId,homeId){
   $('hitSub').classList.remove('open');$('pitchOddsLabel').textContent='';
   $('inningBreak').classList.remove('show');$('matchupBar').style.display='';
   resetAtBatState();atBatLocked=false;
+  $('atbatResult').className='atbat-result';
 
   if(S.isMultiplayer){$('soloScores').style.display='none';$('mpScores').style.display='';mpSendScore()}
   else{$('soloScores').style.display='';$('mpScores').style.display='none'}
@@ -871,6 +877,7 @@ function applyDelayedFeed(d){
       $('rbiRowAB').style.display=S.runnersOn>0?'flex':'none';
       clearZone();renderCountDots(0,0,S.currentOuts);
       updateDynamicOdds(0,0);
+      $('atbatResult').className='atbat-result';
       document.querySelector('.atbat-card-header span').textContent='\uD83C\uDFAF Predict the At-Bat';
       $('statusBar').textContent='\uD83C\uDFAF New batter \u2014 make your call!';$('statusBar').className='status-bar';
     }
@@ -1126,6 +1133,15 @@ function resolveAtBat(event,rbi){
   }
   $('yourScore').textContent=S.userScore;$('cpuScore').textContent=S.cpuScore;
   $('atbatLockedMsg').textContent=(uPts>0?'\u2705':'\u274C')+' '+ev+(S.atBatPick===ev?' NAILED IT! +'+uPts:' +0');
+  // Show result bar under the at-bat card
+  const abResult=$('atbatResult');
+  if(S.atBatPick){
+    const got=uPts>0;
+    abResult.className='atbat-result show '+(got?'correct':'wrong');
+    abResult.textContent=(got?'\u2705 ':'\u274C ')+ev+(got?' \u2014 +'+uPts+' pts!':' \u2014 +0');
+    if(got)playSound(ev==='Home Run'?'homer':'correct');else playSound('wrong');
+    setTimeout(()=>{abResult.classList.remove('show')},5000);
+  }
   mpSendScore();
 }
 
