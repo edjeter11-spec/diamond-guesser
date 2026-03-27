@@ -60,6 +60,20 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .practice-speed.show{display:flex}
 .practice-speed button{border:none;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--muted)}
 .practice-speed button.active{background:#6366f1;color:#fff}
+/* Practice controls bar */
+.practice-controls{display:none;gap:6px;align-items:center;background:var(--card);border-radius:var(--radius);padding:8px 10px}
+.practice-controls.show{display:flex}
+.pctl-btn{border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;transition:transform .1s;white-space:nowrap}
+.pctl-btn:active{transform:scale(0.95)}
+.pctl-next{background:linear-gradient(135deg,#10b981,#059669);color:#fff;flex:1;text-align:center;font-size:14px}
+.pctl-next:disabled{opacity:0.3}
+.pctl-sm{background:var(--card2);color:var(--muted);font-size:10px;padding:6px 8px}
+.pctl-sm:active{background:#334155}
+.pctl-info{font-size:10px;color:var(--muted);text-align:center;flex-shrink:0}
+.pctl-inning-row{display:none;gap:4px;flex-wrap:wrap;justify-content:center;background:var(--card);border-radius:var(--radius);padding:6px 10px}
+.pctl-inning-row.show{display:flex}
+.pctl-inn-btn{border:none;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--muted)}
+.pctl-inn-btn.current{background:#6366f1;color:#fff}
 .game-list{display:flex;flex-direction:column;gap:6px}
 .game-list-header{display:flex;justify-content:space-between;align-items:center;padding:4px 0}
 .game-list-header h2{font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
@@ -420,7 +434,14 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   </div>
   <div class="game-time" id="gameTime"></div>
   <div class="practice-badge" id="practiceBadge">&#127891; Practice Mode — Simulated Game</div>
-  <div class="practice-speed" id="practiceSpeed">&#9654; Speed: <button data-spd="15000">Slow</button><button class="active" data-spd="10000">Normal</button><button data-spd="5000">Fast</button><button data-spd="2000">Turbo</button></div>
+  <div class="practice-speed" id="practiceSpeed">&#9654; Mode: <button class="active" data-spd="0">Manual</button><button data-spd="10000">Auto</button><button data-spd="5000">Fast</button></div>
+  <div class="practice-controls" id="practiceControls">
+    <button class="pctl-btn pctl-sm" id="pctlRewind" title="Previous pitch">&#9664;&#9664;</button>
+    <button class="pctl-btn pctl-next" id="pctlNext">&#9654; Next Pitch</button>
+    <span class="pctl-info" id="pctlInfo">0/0</span>
+    <button class="pctl-btn pctl-sm" id="pctlSkip" title="Skip to inning">&#9197; Skip</button>
+  </div>
+  <div class="pctl-inning-row" id="pctlInnings"></div>
 
   <!-- Solo scores -->
   <div class="scores-row" id="soloScores">
@@ -1651,22 +1672,91 @@ function showEndGame(){
 /* ══════════════════════════════════════
    PRACTICE MODE — Simulated replay
    ══════════════════════════════════════ */
-let practiceMode=false,practicePitches=[],practiceIdx=0,practiceTimer=null,practiceSpeed=10000;
+let practiceMode=false,practicePitches=[],practiceIdx=0,practiceTimer=null,practiceSpeed=0;// 0 = manual
+let practiceWaiting=false;// true when waiting for user to click Next
 let practiceGameData=null;
 
 $('btnPractice').addEventListener('click',()=>startPractice(false));
 $('btnMPPractice').addEventListener('click',()=>startPractice(true));
 
-// Speed buttons
+// Speed/mode buttons
 document.querySelectorAll('.practice-speed button').forEach(btn=>{
   btn.addEventListener('click',()=>{
     document.querySelectorAll('.practice-speed button').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     practiceSpeed=parseInt(btn.dataset.spd);
-    // Restart timer with new speed
-    if(practiceTimer){clearTimeout(practiceTimer);practiceTimer=setTimeout(practiceNextPitch,practiceSpeed)}
+    // Show/hide manual controls
+    $('practiceControls').classList.toggle('show',practiceSpeed===0);
+    // If switching to auto, start timer
+    if(practiceSpeed>0&&practiceWaiting){
+      practiceWaiting=false;
+      practiceTimer=setTimeout(practiceNextPitch,practiceSpeed);
+    }
+    // If switching to manual, stop timer
+    if(practiceSpeed===0&&practiceTimer){clearTimeout(practiceTimer);practiceTimer=null}
   });
 });
+
+// Next Pitch button (manual mode)
+$('pctlNext').addEventListener('click',()=>{
+  if(!practiceMode||!S.gameActive)return;
+  practiceWaiting=false;
+  practiceNextPitch();
+});
+
+// Rewind button
+$('pctlRewind').addEventListener('click',()=>{
+  if(!practiceMode||practiceIdx<=1)return;
+  // Go back 2 (since practiceIdx already advanced past current)
+  practiceIdx=Math.max(0,practiceIdx-2);
+  // Reset state for replay
+  S.userPick='';resetPitchState();setPred(true);
+  clearZone();
+  // Replay from that point
+  const p=practicePitches[practiceIdx];
+  if(p){
+    if(p.batterId)S.lastBatterId=0;// force matchup refresh
+    practiceNextPitch();
+  }
+});
+
+// Skip to inning
+let skipMenuOpen=false;
+$('pctlSkip').addEventListener('click',()=>{
+  skipMenuOpen=!skipMenuOpen;
+  const el=$('pctlInnings');
+  if(!skipMenuOpen){el.classList.remove('show');return}
+  // Build inning buttons from pitch data
+  const innings=new Set();
+  practicePitches.forEach(p=>{innings.add(p.inning)});
+  const sorted=[...innings].sort((a,b)=>a-b);
+  el.innerHTML=sorted.map(inn=>{
+    const isCurrent=practicePitches[Math.min(practiceIdx,practicePitches.length-1)]&&practicePitches[Math.min(practiceIdx,practicePitches.length-1)].inning===inn;
+    return`<button class="pctl-inn-btn${isCurrent?' current':''}" data-inn="${inn}">${ordinal(inn)}</button>`;
+  }).join('');
+  el.classList.add('show');
+  // Click handler for inning buttons
+  el.querySelectorAll('.pctl-inn-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const targetInn=parseInt(btn.dataset.inn);
+      // Find first pitch of that inning
+      const idx=practicePitches.findIndex(p=>p.inning===targetInn);
+      if(idx>=0){
+        practiceIdx=idx;S.lastBatterId=0;S.userPick='';resetPitchState();setPred(true);clearZone();abReset();
+        updatePctlInfo();
+        $('statusBar').textContent='\u23E9 Skipped to '+ordinal(targetInn)+' inning';$('statusBar').className='status-bar';
+        // Auto-show first pitch of inning
+        if(practiceSpeed===0)practiceWaiting=true;
+        else practiceTimer=setTimeout(practiceNextPitch,500);
+      }
+      el.classList.remove('show');skipMenuOpen=false;
+    });
+  });
+});
+
+function updatePctlInfo(){
+  $('pctlInfo').textContent=(practiceIdx)+'/'+practicePitches.length;
+}
 
 async function startPractice(isMP){
   const btn=isMP?$('btnMPPractice'):$('btnPractice');
@@ -1745,10 +1835,12 @@ async function startPractice(isMP){
     S.gameActive=true;
     $('practiceBadge').classList.add('show');
     $('practiceSpeed').classList.add('show');
+    $('practiceControls').classList.toggle('show',practiceSpeed===0);
     document.querySelector('.delay-bar').style.display='none';
     $('gameTime').textContent='\uD83C\uDFAC Replay: '+away+' vs '+home+' ('+ds+')';
-    $('statusBar').textContent='\uD83C\uDFAF Practice! Make your prediction...';
+    $('statusBar').textContent='\uD83C\uDFAF Make your pick, then tap Next Pitch';
     setPred(true);
+    updatePctlInfo();
 
     if(isMP&&roomRef){
       // Host: broadcast game info and control pitch timing via Firebase
@@ -1756,8 +1848,9 @@ async function startPractice(isMP){
       // Host drives the pitch timer
       practiceTimer=setTimeout(practiceNextPitchMP,practiceSpeed);
     }else{
-      // Solo practice
-      practiceTimer=setTimeout(practiceNextPitch,practiceSpeed);
+      // Solo practice — manual mode waits, auto mode starts timer
+      if(practiceSpeed===0){practiceWaiting=true;$('pctlNext').disabled=false}
+      else{practiceTimer=setTimeout(practiceNextPitch,practiceSpeed)}
     }
   }catch(e){
     btn.textContent='Error loading \u2014 try again';
@@ -1846,8 +1939,7 @@ function setupPracticeListener(){
 function practiceNextPitch(){
   if(!S.gameActive||!practiceMode||practiceIdx>=practicePitches.length){
     if(practiceIdx>=practicePitches.length){
-      // Game over
-      S.gameActive=false;if(S.userScore>0)saveLB();
+      S.gameActive=false;if(S.userScore>0){saveLB();saveUserStats()}
       setTimeout(showEndGame,1500);
     }
     return;
@@ -1862,7 +1954,6 @@ function practiceNextPitch(){
     if(p.pitcherId)$('pitcherImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+p.pitcherId+'/headshot/67/current';
     if(p.batterId)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+p.batterId+'/headshot/67/current';
     abReset();clearZone();
-    $('statusBar').textContent='\uD83C\uDFAF '+p.batterName+' is up \u2014 make your call!';$('statusBar').className='status-bar';
   }
 
   // Update inning
@@ -1889,12 +1980,20 @@ function practiceNextPitch(){
   }
 
   practiceIdx++;
+  updatePctlInfo();
 
-  // Schedule next pitch
+  // Schedule or wait for next pitch
   if(practiceIdx<practicePitches.length){
-    $('statusBar').textContent='\uD83C\uDFAF Pitch '+(practiceIdx+1)+' of '+practicePitches.length+' \u2014 make your call!';
     setPred(true);resetPitchState();
-    practiceTimer=setTimeout(practiceNextPitch,practiceSpeed);
+    if(practiceSpeed===0){
+      // Manual mode — wait for user to click Next
+      practiceWaiting=true;
+      $('pctlNext').disabled=false;
+      setTimeout(()=>{$('statusBar').textContent='\uD83C\uDFAF Make your pick, then tap Next Pitch';$('statusBar').className='status-bar'},2500);
+    }else{
+      // Auto mode
+      practiceTimer=setTimeout(practiceNextPitch,practiceSpeed);
+    }
   }
 }
 
@@ -1902,8 +2001,9 @@ function practiceNextPitch(){
 const origBackHandler=$('backBtn').onclick;
 $('backBtn').addEventListener('click',()=>{
   if(practiceMode){
-    practiceMode=false;if(practiceTimer)clearTimeout(practiceTimer);
+    practiceMode=false;practiceWaiting=false;if(practiceTimer)clearTimeout(practiceTimer);
     $('practiceBadge').classList.remove('show');$('practiceSpeed').classList.remove('show');
+    $('practiceControls').classList.remove('show');$('pctlInnings').classList.remove('show');
     document.querySelector('.delay-bar').style.display='';
   }
 });
