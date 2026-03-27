@@ -888,6 +888,14 @@ $('joinRoomBtn').addEventListener('click',async()=>{
   setupPracticeListener();
 });
 
+function mpCheckReady(){
+  if(!S.isMultiplayer||!roomRef)return;
+  const pitchReady=!!S.userPick&&pitchLocked;
+  const abReady=abState==='locked'||abState==='result';
+  if(pitchReady&&abReady){
+    roomRef.child('players/'+S.playerId+'/ready').set(true);
+  }
+}
 function mpSendScore(pick,got){
   if(!S.isMultiplayer||!roomRef)return;
   const upd={score:S.userScore,streak:S.streak};
@@ -983,10 +991,209 @@ function startGame(gameId,away,home,awayId,homeId){
 
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');startTicker();renderGameLB();
   feedBuffer=[];
-  clearInterval(S.fetchInterval);clearInterval(S.queueInterval);
-  fetchLoop();S.queueInterval=setInterval(processQueue,300);
+  clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
+
+  if(S.isMultiplayer){
+    // MP: only host fetches API, clients listen to Firebase
+    if(S.isHost){mpHostStart()}
+    else{mpClientStart()}
+  }else{
+    // Solo: fetch directly
+    fetchLoop();S.queueInterval=setInterval(processQueue,300);
+  }
 }
-function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);stopTicker();if(S.userScore>0){saveLB();saveUserStats()}}
+function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);clearTimeout(mpCountdownTimer);stopTicker();if(S.userScore>0){saveLB();saveUserStats()}}
+
+/* ══════════════════════════════════════
+   MULTIPLAYER SYNC — Host drives everything
+   ══════════════════════════════════════ */
+let mpCountdownTimer=null;let mpPendingPitch=null;
+
+// HOST: fetch API, broadcast state, wait for ready, resolve
+function mpHostStart(){
+  mpHostFetch();
+  mpHostListenCountdown();
+  // Listen for all players ready
+  roomRef.child('players').on('value',snap=>{
+    S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
+    // Check if all players are ready
+    if(mpPendingPitch&&S.gameActive){
+      const players=Object.values(S.mpPlayers);
+      const allReady=players.length>0&&players.every(p=>p.ready===true);
+      if(allReady)mpHostTriggerCountdown();
+    }
+  });
+}
+
+async function mpHostFetch(){
+  if(!S.gameActive||!S.isMultiplayer)return;
+  try{
+    const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+S.gameId+'/feed/live?fields=gameData,datetime,firstPitch,dateTime,status,detailedState,teams,away,home,name,abbreviation,id,liveData,linescore,currentInning,inningHalf,inningState,teams,away,home,runs,offense,first,second,third,fullName,batter,onDeck,inHole,defense,pitcher,plays,currentPlay,matchup,pitcher,batter,fullName,id,count,balls,strikes,outs,about,isComplete,inning,halfInning,result,event,eventType,description,rbi,awayScore,homeScore,isScoringPlay,playEvents,isPitch,pitchNumber,details,description,call,code,type,code,description,pitchData,coordinates,pX,pZ,strikeZoneTop,strikeZoneBottom,startSpeed,allPlays,scoringPlays');
+    if(!r.ok)throw new Error(r.status);
+    const d=await r.json();
+
+    // Build game state to broadcast
+    const ls=d.liveData.linescore||{};const cp=d.liveData.plays&&d.liveData.plays.currentPlay;
+    const gs={
+      inning:ls.currentInning||0,half:ls.inningHalf||'',inningState:ls.inningState||'',
+      awayRuns:0,homeRuns:0,detState:d.gameData&&d.gameData.status?d.gameData.status.detailedState:'',
+      pitcherName:'',pitcherId:0,batterName:'',batterId:0,
+      balls:0,strikes:0,outs:0,
+      r1:false,r2:false,r3:false,r1Name:'',r2Name:'',r3Name:''
+    };
+    try{gs.awayRuns=ls.teams.away.runs||0;gs.homeRuns=ls.teams.home.runs||0}catch(e){}
+    if(cp&&cp.matchup){
+      if(cp.matchup.pitcher){gs.pitcherName=cp.matchup.pitcher.fullName||'';gs.pitcherId=cp.matchup.pitcher.id||0}
+      if(cp.matchup.batter){gs.batterName=cp.matchup.batter.fullName||'';gs.batterId=cp.matchup.batter.id||0}
+      if(cp.count){gs.balls=cp.count.balls;gs.strikes=cp.count.strikes;gs.outs=cp.count.outs}
+    }
+    try{
+      const off=ls.offense||{};
+      gs.r1=!!off.first;gs.r2=!!off.second;gs.r3=!!off.third;
+      if(off.first)gs.r1Name=off.first.fullName||'';
+      if(off.second)gs.r2Name=off.second.fullName||'';
+      if(off.third)gs.r3Name=off.third.fullName||'';
+    }catch(e){}
+
+    // Broadcast game state
+    roomRef.child('gameState').set(gs);
+
+    // Check for new pitches
+    if(cp){
+      const events=cp.playEvents;
+      if(events&&events.length){
+        for(let i=0;i<events.length;i++){
+          const ev=events[i];if(!ev.isPitch)continue;
+          const pn=ev.pitchNumber;if(pn<=S.lastPitchNum)continue;
+          S.lastPitchNum=pn;
+          const pr=cp.result?cp.result.event||'':'';const rbi=cp.result?cp.result.rbi||0:0;
+          const pitch={pitchNum:pn,desc:ev.details?ev.details.description:'?',
+            callCode:ev.details&&ev.details.call?ev.details.call.code:'',
+            typeCode:ev.details&&ev.details.type?ev.details.type.code:'',
+            typeDesc:ev.details&&ev.details.type?ev.details.type.description:'',
+            pX:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pX:null,
+            pZ:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pZ:null,
+            szTop:ev.pitchData?ev.pitchData.strikeZoneTop||3.5:3.5,szBot:ev.pitchData?ev.pitchData.strikeZoneBottom||1.5:1.5,
+            speed:ev.pitchData?ev.pitchData.startSpeed:null,
+            countBalls:ev.count?ev.count.balls:0,countStrikes:ev.count?ev.count.strikes:0,countOuts:ev.count?ev.count.outs:0,
+            playResult:pr,playRbi:rbi,
+            isComplete:cp.about&&cp.about.isComplete,abResult:cp.about&&cp.about.isComplete?pr:'',abRbi:rbi
+          };
+          // Store pending pitch — wait for all ready
+          mpPendingPitch=pitch;
+          // Reset everyone's ready status
+          const players=S.mpPlayers;
+          Object.keys(players).forEach(pid=>{roomRef.child('players/'+pid+'/ready').set(false)});
+          // Broadcast that a pitch is pending
+          roomRef.child('pendingPitch').set({pitchNum:pn,desc:'Pitch #'+pn+' incoming...',time:Date.now()});
+          $('statusBar').textContent='\uD83D\uDCE1 Pitch #'+pn+' \u2014 waiting for all picks...';
+        }
+      }
+      // At-bat complete check
+      if(cp.about&&cp.about.isComplete&&cp.result&&cp.result.event){
+        roomRef.child('gameState/abComplete').set(cp.result.event);
+        roomRef.child('gameState/abRbi').set(cp.result.rbi||0);
+      }
+    }
+  }catch(e){$('statusBar').textContent='\u26A0 API error \u2014 retrying...'}
+  // Keep polling
+  if(S.gameActive&&S.isMultiplayer)S.fetchInterval=setTimeout(mpHostFetch,getFetchInterval());
+}
+
+function mpHostTriggerCountdown(){
+  if(!mpPendingPitch)return;
+  // Broadcast countdown start
+  roomRef.child('countdown').set({start:Date.now(),pitch:mpPendingPitch});
+  mpPendingPitch=null;
+}
+
+// CLIENT: listen to Firebase for all state
+function mpClientStart(){
+  // Listen for game state
+  roomRef.child('gameState').on('value',snap=>{
+    const gs=snap.val();if(!gs)return;
+    mpApplyGameState(gs);
+  });
+  // Listen for pending pitch (time to make picks)
+  roomRef.child('pendingPitch').on('value',snap=>{
+    const pp=snap.val();if(!pp)return;
+    setPred(true);resetPitchState();
+    $('statusBar').textContent='\uD83D\uDCE1 '+pp.desc+' \u2014 make your picks!';$('statusBar').className='status-bar';
+  });
+  // Listen for countdown (synced resolve)
+  roomRef.child('countdown').on('value',snap=>{
+    const cd=snap.val();if(!cd||!cd.pitch)return;
+    mpRunCountdown(cd.pitch);
+  });
+  // Players
+  roomRef.child('players').on('value',snap=>{
+    S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
+  });
+}
+
+// Also make host listen to countdown (so host resolves at same time)
+function mpHostListenCountdown(){
+  roomRef.child('countdown').on('value',snap=>{
+    const cd=snap.val();if(!cd||!cd.pitch)return;
+    mpRunCountdown(cd.pitch);
+  });
+}
+
+// Shared: apply game state to UI (used by client, and also by host for display)
+function mpApplyGameState(gs){
+  S.currentInning=gs.inning;
+  const arrow=gs.half==='Top'?'\u25B2':'\u25BC';
+  $('inningBadge').textContent=arrow+' '+ordinal(gs.inning);
+  $('awayScore').textContent=gs.awayRuns;$('homeScore').textContent=gs.homeRuns;
+  if(gs.pitcherName)$('pitcherName').textContent=gs.pitcherName;
+  if(gs.batterName)$('batterName').textContent=gs.batterName;
+  if(gs.pitcherId)$('pitcherImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+gs.pitcherId+'/headshot/67/current';
+  if(gs.batterId)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+gs.batterId+'/headshot/67/current';
+  // New batter?
+  if(gs.batterId&&gs.batterId!==S.lastBatterId){
+    S.lastBatterId=gs.batterId;S.currentCount={balls:0,strikes:0};
+    abReset();clearZone();
+    $('statusBar').textContent='\uD83C\uDFAF '+gs.batterName+' is up \u2014 make your call!';$('statusBar').className='status-bar';
+  }
+  S.currentCount={balls:gs.balls,strikes:gs.strikes};S.currentOuts=gs.outs;
+  renderCountDots(gs.balls,gs.strikes,gs.outs);
+  $('countDisplay').innerHTML='<span>'+gs.balls+'</span>-<span>'+gs.strikes+'</span> \u2022 '+gs.outs+' out';
+  updateDynamicOdds(gs.balls,gs.strikes);
+  const r1=gs.r1,r2=gs.r2,r3=gs.r3;let rCount=0;
+  if(r1)rCount++;if(r2)rCount++;if(r3)rCount++;
+  S.runnersOn=rCount;S.runnersOnSecond=r2;S.runnersOnThird=r3;
+  renderBases(r1,r2,r3,{first:r1?{fullName:gs.r1Name}:null,second:r2?{fullName:gs.r2Name}:null,third:r3?{fullName:gs.r3Name}:null});
+  updateSitBadges();
+  // Game over?
+  if(gs.detState==='Final'||gs.detState==='Game Over'){
+    if(S.gameActive){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}setTimeout(showEndGame,2000)}
+  }
+  // At-bat complete?
+  if(gs.abComplete&&!S.atBatResolved){resolveAtBat(gs.abComplete,gs.abRbi||0)}
+}
+
+// Shared: synced countdown then resolve
+function mpRunCountdown(pitch){
+  setPred(false);
+  if(S.userPick&&!pitchLocked)lockPitchPick();
+  let sec=3;
+  $('statusBar').textContent='\u23F0 Pitch reveal in '+sec+'...';$('statusBar').className='status-bar';
+  if(mpCountdownTimer)clearInterval(mpCountdownTimer);
+  mpCountdownTimer=setInterval(()=>{
+    sec--;
+    if(sec<=0){
+      clearInterval(mpCountdownTimer);mpCountdownTimer=null;
+      // Resolve for everyone at the same time
+      resolvePitch(pitch);
+      if(pitch.isComplete&&pitch.abResult&&!S.atBatResolved)resolveAtBat(pitch.abResult,pitch.abRbi||0);
+      // Clear countdown from Firebase so it doesn't re-trigger
+      if(S.isHost&&roomRef)roomRef.child('countdown').remove();
+      if(S.isHost&&roomRef)roomRef.child('pendingPitch').remove();
+    }else{
+      $('statusBar').textContent='\u23F0 Pitch reveal in '+sec+'...';
+    }
+  },1000);
+}
 
 /* ══════════════════════════════════════
    FETCH + DELAYED FEED
@@ -1291,7 +1498,7 @@ function lockPitchPick(){
   pitchLocked=true;
   setPred(false);
   if(practiceMode)practiceAutoCheck();
-  if(S.isMultiplayer&&roomRef)roomRef.child('players/'+S.playerId+'/ready').set(true);
+  mpCheckReady();
   if(!S.isMultiplayer){
     const r=Math.random()*100;
     S.cpuPick=r<38?'Ball':r<55?'Strike':r<73?'Foul':r<83?'Out':r<90?(Math.random()<0.65?'Single':Math.random()<0.9?'Double':'Triple'):'Homer';
@@ -1350,8 +1557,7 @@ function abLock(){
   document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
   if(navigator.vibrate)navigator.vibrate([30,20,30]);
   if(practiceMode)practiceAutoCheck();
-  // MP: broadcast that we're ready
-  if(S.isMultiplayer&&roomRef)roomRef.child('players/'+S.playerId+'/ready').set(true);
+  mpCheckReady();
 }
 function abStartCountdown(){
   if(abState==='locked'||!S.atBatPick)return;
