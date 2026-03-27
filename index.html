@@ -272,6 +272,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .status-bar{background:var(--card);border-radius:var(--radius);padding:10px 12px;text-align:center;font-weight:600;font-size:14px;transition:background .3s,color .3s;min-height:42px;display:flex;align-items:center;justify-content:center}
 .status-bar.correct{background:#166534;color:#4ade80}
 .status-bar.wrong{background:#7f1d1d;color:#fca5a5}
+.status-bar.countdown{background:linear-gradient(135deg,#78350f,#92400e);color:#fbbf24;font-size:16px;font-weight:900;animation:pulse 0.8s ease-in-out infinite}
 .status-bar.paused{background:#78350f;color:var(--accent)}
 
 /* Delay */
@@ -1663,7 +1664,13 @@ function resolveAtBat(event,rbi){
     if(got){playSound(ev==='Home Run'?'homer':'correct');if(ev==='Home Run')triggerConfetti()}else{playSound('wrong');triggerShake()}
   }
   mpSendScore(S.atBatPick?'AB:'+S.atBatPick:null,S.atBatPick?uPts>0:null);
-  // Card stays in 'result' state until new batter is detected by API
+  // Auto-clear result after 6 seconds so next at-bat card opens
+  setTimeout(()=>{
+    if(abState==='result'){
+      abReset();
+      if(S.gameActive)document.querySelector('.atbat-card-header span').textContent='\uD83C\uDFAF Predict the Next At-Bat';
+    }
+  },6000);
 }
 
 /* ══════════════════════════════════════
@@ -2268,14 +2275,33 @@ function practiceNextPitch(){
   }
   const p=practicePitches[practiceIdx];
 
+  // Save at-bat state before batter change
+  const savedABPick=S.atBatPick;
+  const savedABState=abState;
+  const savedABCPU=S.atBatCPU;
+  const savedABRbi=S.atBatRbiPick;
+
   // Update matchup display
-  if(p.batterId!==S.lastBatterId&&p.batterId){
+  const newBatter=p.batterId!==S.lastBatterId&&p.batterId;
+  if(newBatter){
     S.lastBatterId=p.batterId;
     $('pitcherName').textContent=p.pitcherName||'\u2014';
     $('batterName').textContent=p.batterName||'\u2014';
     if(p.pitcherId)$('pitcherImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+p.pitcherId+'/headshot/67/current';
     if(p.batterId)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+p.batterId+'/headshot/67/current';
-    abReset();clearZone();
+    clearZone();
+    // Only reset at-bat if previous at-bat was resolved or no pick was made
+    if(savedABState==='result'||!savedABPick){
+      abReset();
+    }else if(savedABPick&&savedABState==='locked'){
+      // Preserve the locked at-bat pick for this new batter's first pitch
+      // (user pre-picked during break or previous at-bat)
+      S.atBatPick=savedABPick;S.atBatCPU=savedABCPU;S.atBatRbiPick=savedABRbi;
+      abState='locked';
+      $('atbatCard').classList.add('locked');
+      $('atbatLockedMsg').textContent='\uD83D\uDD12 At-Bat: '+S.atBatPick+(S.atBatRbiPick?' + RBI':'');
+      document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=true;b.classList.remove('sel');if(b.dataset.ab===S.atBatPick)b.classList.add('sel')});
+    }
   }
 
   // Update inning
@@ -2293,30 +2319,45 @@ function practiceNextPitch(){
   // If user has a pitch pick, lock it now
   if(S.userPick&&!pitchLocked)lockPitchPick();
 
-  // Resolve the pitch
-  resolvePitch(p);
+  // Disable buttons during countdown
+  setPred(false);
+  document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
 
-  // If this was the last pitch of an at-bat, resolve it
-  if(p.isLastPitchOfAB&&p.abResult){
-    resolveAtBat(p.abResult,p.abRbi);
-  }
-
-  practiceIdx++;
-  updatePctlInfo();
-
-  // Schedule or wait for next pitch
-  if(practiceIdx<practicePitches.length){
-    setPred(true);resetPitchState();
-    if(practiceSpeed===0){
-      // Manual mode — auto-advance if both picks are made, otherwise wait
-      practiceWaiting=true;
-      $('pctlNext').disabled=false;
-      practiceAutoCheck();
+  // 3-2-1 countdown then resolve
+  let cd=3;
+  $('statusBar').textContent='\uD83D\uDD25 PITCHING... '+cd;$('statusBar').className='status-bar countdown';
+  const cdTimer=setInterval(()=>{
+    cd--;
+    if(cd>0){
+      $('statusBar').textContent='\uD83D\uDD25 PITCHING... '+cd;
+    }else if(cd===0){
+      $('statusBar').textContent='\u26BE HERE COMES THE PITCH!';
     }else{
-      // Auto mode
-      practiceTimer=setTimeout(practiceNextPitch,practiceSpeed);
+      clearInterval(cdTimer);
+      // Resolve the pitch
+      resolvePitch(p);
+      // If this was the last pitch of an at-bat, resolve it
+      if(p.isLastPitchOfAB&&p.abResult){
+        resolveAtBat(p.abResult,p.abRbi);
+      }
+      practiceIdx++;
+      updatePctlInfo();
+      // Schedule or wait for next pitch
+      if(practiceIdx<practicePitches.length){
+        // Re-enable pitch predictions but not at-bat (stays locked if locked)
+        setPred(true);resetPitchState();
+        if(abState!=='locked'&&abState!=='result'){
+          document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=false);
+        }
+        if(practiceSpeed===0){
+          practiceWaiting=true;$('pctlNext').disabled=false;
+          practiceAutoCheck();
+        }else{
+          practiceTimer=setTimeout(practiceNextPitch,practiceSpeed);
+        }
+      }
     }
-  }
+  },800);
 }
 
 // Override back button to handle practice mode cleanup
