@@ -758,7 +758,10 @@ auth.onAuthStateChanged(async(user)=>{
     $('balVal').textContent=userBalance.toLocaleString();
     $('logoutBtn').style.display=isGuest?'none':'';
     $('homeBalance').style.display='';
-    showScreen('screenHome');renderHomeLB();loadGames();
+    // Try to rejoin an active multiplayer room (page reload)
+    const rejoined=await tryRejoinRoom();
+    if(!rejoined){showScreen('screenHome');renderHomeLB();loadGames()}
+    else{renderHomeLB();loadGames()}
   }else{
     currentUser=null;userBalance=0;
     showScreen('screenAuth');
@@ -880,7 +883,7 @@ $('soloSim').addEventListener('click',()=>{
 });
 $('soloCancel').addEventListener('click',()=>{$('soloModal').classList.remove('show')});
 $('btnFriendsMode').addEventListener('click',()=>{ensureName();showScreen('screenLobby');$('lobbyOptions').style.display='';$('roomDisplay').classList.remove('show')});
-$('lobbyBackBtn').addEventListener('click',()=>{mpDisconnect();showScreen('screenHome')});
+$('lobbyBackBtn').addEventListener('click',()=>{mpDisconnect(true);showScreen('screenHome')});
 
 function ensureName(){
   if(!S.playerName){S.playerName=currentUser&&currentUser.displayName?currentUser.displayName:'Guest';localStorage.setItem('dg_name',S.playerName)}
@@ -891,58 +894,94 @@ function ensureName(){
    ══════════════════════════════════════ */
 function genCode(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let r='';for(let i=0;i<4;i++)r+=c[Math.floor(Math.random()*c.length)];return r}
 
-$('createRoomBtn').addEventListener('click',()=>{
-  const code=genCode();S.roomCode=code;S.isMultiplayer=true;S.isHost=true;
+// Save/clear room session for reload persistence
+function saveRoomSession(){sessionStorage.setItem('dg_room',JSON.stringify({code:S.roomCode,isHost:S.isHost}))}
+function clearRoomSession(){sessionStorage.removeItem('dg_room')}
+
+// Setup presence heartbeat — keeps player alive through refreshes
+function setupPresence(){
+  if(!roomRef||!S.playerId)return;
+  const pRef=roomRef.child('players/'+S.playerId);
+  // Set last_seen on connect, mark offline after 15s disconnect (enough for a reload)
+  const connRef=db.ref('.info/connected');
+  connRef.on('value',snap=>{
+    if(snap.val()===true&&roomRef){
+      pRef.child('online').onDisconnect().set(false);
+      pRef.child('lastSeen').onDisconnect().set(firebase.database.ServerValue.TIMESTAMP);
+      pRef.child('online').set(true);
+      pRef.child('lastSeen').set(firebase.database.ServerValue.TIMESTAMP);
+    }
+  });
+}
+
+function joinRoom(code,isHost,isRejoin){
+  S.roomCode=code;S.isMultiplayer=true;S.isHost=isHost;
   $('lobbyOptions').style.display='none';$('roomDisplay').classList.add('show');
   $('roomCodeVal').textContent=code;
-  $('roomStatus').textContent='You are the host. Pick a game to start!';
-  $('roomGamePick').style.display='';
-
+  $('roomGamePick').style.display=isHost?'':'none';
   roomRef=db.ref('rooms/'+code);
-  roomRef.set({host:S.playerId,created:Date.now(),players:{[S.playerId]:{name:S.playerName,score:0,streak:0,isHost:true}}});
-  // Auto-cleanup on disconnect
-  roomRef.onDisconnect().remove();
+  saveRoomSession();
+  setupPresence();
 
   // Listen for player changes
   roomRef.child('players').on('value',snap=>{
     S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
   });
-  // Listen for game start (for late joiners)
+  // Listen for game start
   roomRef.child('game').on('value',snap=>{
     const g=snap.val();if(g&&g.gameId&&!S.gameActive)startGame(g.gameId,g.away,g.home,g.awayId,g.homeId);
   });
+}
 
+$('createRoomBtn').addEventListener('click',()=>{
+  const code=genCode();
+  roomRef=db.ref('rooms/'+code);
+  roomRef.set({host:S.playerId,created:Date.now(),players:{[S.playerId]:{name:S.playerName,score:0,streak:0,isHost:true,online:true}}});
+  joinRoom(code,true,false);
+  $('roomStatus').textContent='You are the host. Pick a game to start!';
   loadGames($('roomGamesList')).then(()=>renderGameList($('roomGamesList'),cachedGames,true));
 });
 
 $('joinRoomBtn').addEventListener('click',async()=>{
   const code=$('joinCodeInput').value.trim().toUpperCase();
   if(code.length!==4){$('roomStatus').textContent='Enter a 4-letter code';return}
-  S.roomCode=code;S.isMultiplayer=true;S.isHost=false;
-  $('lobbyOptions').style.display='none';$('roomDisplay').classList.add('show');
-  $('roomCodeVal').textContent=code;
-  $('roomStatus').textContent='Connecting...';
-  $('roomGamePick').style.display='none';
 
-  roomRef=db.ref('rooms/'+code);
-  // Check if room exists
-  const snap=await roomRef.once('value');
+  const ref=db.ref('rooms/'+code);
+  const snap=await ref.once('value');
   if(!snap.exists()){$('roomStatus').textContent='Room not found. Check the code.';return}
 
   // Add ourselves
-  roomRef.child('players/'+S.playerId).set({name:S.playerName,score:0,streak:0,isHost:false});
-  roomRef.child('players/'+S.playerId).onDisconnect().remove();
-
-  // Listen for changes
-  roomRef.child('players').on('value',snap=>{
-    S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
-  });
-  roomRef.child('game').on('value',snap=>{
-    const g=snap.val();if(g&&g.gameId&&!S.gameActive)startGame(g.gameId,g.away,g.home,g.awayId,g.homeId);
-  });
+  ref.child('players/'+S.playerId).set({name:S.playerName,score:0,streak:0,isHost:false,online:true});
+  joinRoom(code,false,false);
   $('roomStatus').textContent='Connected! Waiting for host to pick a game...';
   setupPracticeListener();
 });
+
+// Auto-rejoin room after page reload
+async function tryRejoinRoom(){
+  const saved=sessionStorage.getItem('dg_room');
+  if(!saved)return false;
+  try{
+    const{code,isHost}=JSON.parse(saved);
+    const ref=db.ref('rooms/'+code);
+    const snap=await ref.once('value');
+    if(!snap.exists()){clearRoomSession();return false}
+    // Room still exists — rejoin it
+    const pData=snap.child('players/'+S.playerId).val();
+    if(pData){
+      // We're still in the room, just reconnect listeners
+      ref.child('players/'+S.playerId).update({online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP});
+    }else{
+      // We were removed — re-add ourselves
+      ref.child('players/'+S.playerId).set({name:S.playerName,score:pData?pData.score||0:0,streak:pData?pData.streak||0:0,isHost:isHost,online:true});
+    }
+    joinRoom(code,isHost,true);
+    $('roomStatus').textContent=isHost?'Reconnected as host!':'Reconnected!';
+    if(isHost)loadGames($('roomGamesList')).then(()=>renderGameList($('roomGamesList'),cachedGames,true));
+    showScreen('screenLobby');
+    return true;
+  }catch(e){clearRoomSession();return false}
+}
 
 function mpCheckReady(){
   if(!S.isMultiplayer||!roomRef)return;
@@ -959,12 +998,16 @@ function mpSendScore(pick,got){
   if(got!==undefined)upd.lastGot=got;// true/false/null
   roomRef.child('players/'+S.playerId).update(upd);
 }
-function mpDisconnect(){
+function mpDisconnect(intentional){
   if(roomRef){
-    if(S.isHost)roomRef.remove();
-    else roomRef.child('players/'+S.playerId).remove();
+    if(intentional){
+      // User explicitly left — remove from Firebase
+      if(S.isHost)roomRef.remove();
+      else roomRef.child('players/'+S.playerId).remove();
+    }
     roomRef.off();roomRef=null;
   }
+  if(intentional)clearRoomSession();
   S.mpPlayers={};S.isMultiplayer=false;S.isHost=false;S.roomCode='';
 }
 function renderRoomPlayers(){
@@ -1302,11 +1345,16 @@ function mpRunCountdown(pitch){
       clearInterval(mpCountdownTimer);mpCountdownTimer=null;
       mpCountdownActive=false;
       resolvePitch(pitch);
-      if((pitch.isComplete||pitch.isLastPitchOfAB)&&pitch.abResult&&S.atBatResolved!==S.lastBatterId)resolveAtBat(pitch.abResult,pitch.abRbi||0);
+      const hasAbResult=(pitch.isComplete||pitch.isLastPitchOfAB)&&pitch.abResult&&S.atBatResolved!==S.lastBatterId;
+      if(hasAbResult){
+        // Delay at-bat resolve slightly so pitch result is visible first
+        setTimeout(()=>{resolveAtBat(pitch.abResult,pitch.abRbi||0)},1200);
+      }
       // Host: clean up Firebase for next pitch cycle
       if(S.isHost&&roomRef){roomRef.child('countdown').remove();roomRef.child('pendingPitch').remove()}
-      // Re-enable after 2 seconds
-      setTimeout(()=>{if(S.gameActive&&!S.gamePaused){setPred(true);resetPitchState()}},2000);
+      // Re-enable picks — give more time if at-bat just resolved so result is visible
+      const reEnableDelay=hasAbResult?4000:2000;
+      setTimeout(()=>{if(S.gameActive&&!S.gamePaused){setPred(true);resetPitchState()}},reEnableDelay);
     }
   },800);
 }
@@ -2112,7 +2160,7 @@ function updateStreakUI(){
 /* ══════════════════════════════════════
    END-OF-GAME SUMMARY
    ══════════════════════════════════════ */
-$('egClose').addEventListener('click',()=>{$('endgameOverlay').classList.remove('show');showScreen('screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString();$('pctlEnd').style.display='none';practiceMode=false});
+$('egClose').addEventListener('click',()=>{$('endgameOverlay').classList.remove('show');if(S.isMultiplayer)mpDisconnect(true);showScreen('screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString();$('pctlEnd').style.display='none';practiceMode=false});
 function showEndGame(){
   const total=S.totalPredictions||0;const correct=S.correctCount||0;
   $('egScore').textContent=S.userScore;
@@ -2509,13 +2557,16 @@ function mpPracticeSendNextPitch(){
     return;
   }
   const p=practicePitches[practiceIdx];
-  // Broadcast game state for this pitch
+  // Check if this is a new batter compared to previous pitch
+  const prevPitch=practiceIdx>0?practicePitches[practiceIdx-1]:null;
+  const isNewBatter=!prevPitch||p.batterId!==prevPitch.batterId;
+  // Broadcast game state for this pitch — show 0-0 for new batters (don't spoil)
   const gs={
     inning:p.inning,half:p.half,inningState:'',
     awayRuns:0,homeRuns:0,detState:'',
     pitcherName:p.pitcherName,pitcherId:p.pitcherId,
     batterName:p.batterName,batterId:p.batterId,
-    balls:p.countBalls,strikes:p.countStrikes,outs:p.countOuts,
+    balls:isNewBatter?0:p.countBalls,strikes:isNewBatter?0:p.countStrikes,outs:p.countOuts,
     r1:p.r1||false,r2:p.r2||false,r3:p.r3||false,
     r1Name:p.r1Name||'',r2Name:p.r2Name||'',r3Name:p.r3Name||''
   };
@@ -2551,19 +2602,23 @@ function mpPracticeStart(){
   // Host + clients both listen for countdown
   roomRef.child('countdown').on('value',snap=>{
     const cd=snap.val();if(!cd||!cd.pitch)return;
+    // mpRunCountdown handles pitch resolve + at-bat resolve
+    // We advance AFTER both resolve with enough time to show results
     mpRunCountdown(cd.pitch);
-    // After resolve, advance to next pitch
+    // Countdown takes ~3200ms (3*800+800). At-bat result needs 3+ seconds to display.
+    // Total wait: 3200ms countdown + 3500ms result display = 6700ms
+    const hasAbResult=cd.pitch.isLastPitchOfAB&&cd.pitch.abResult;
+    const advanceDelay=hasAbResult?7000:4500;
     setTimeout(()=>{
       practiceIdx++;
       updatePctlInfo();
       if(S.isHost&&practiceIdx<practicePitches.length){
-        // Small delay then send next pitch
-        setTimeout(mpPracticeSendNextPitch,2000);
+        setTimeout(mpPracticeSendNextPitch,1000);
       }else if(practiceIdx>=practicePitches.length){
         S.gameActive=false;if(S.userScore>0){saveLB();saveUserStats()}
         setTimeout(showEndGame,1500);
       }
-    },3500);// wait for countdown (3s) + small buffer
+    },advanceDelay);
   });
   // Send first pitch
   mpPracticeSendNextPitch();
@@ -2599,7 +2654,9 @@ function setupPracticeListener(){
     roomRef.child('countdown').on('value',cdSnap=>{
       const cd=cdSnap.val();if(!cd||!cd.pitch)return;
       mpRunCountdown(cd.pitch);
-      setTimeout(()=>{practiceIdx++;setPred(true);resetPitchState()},3500);
+      const hasAbResult=cd.pitch.isLastPitchOfAB&&cd.pitch.abResult;
+      const advanceDelay=hasAbResult?7000:4500;
+      setTimeout(()=>{practiceIdx++;setPred(true);resetPitchState()},advanceDelay);
     });
     roomRef.child('players').on('value',plSnap=>{
       S.mpPlayers=plSnap.val()||{};renderRoomPlayers();renderMPScores();
@@ -2697,14 +2754,17 @@ function practiceNextPitch(){
       clearInterval(cdTimer);
       // Resolve the pitch
       resolvePitch(p);
-      // If this was the last pitch of an at-bat, resolve it
-      if(p.isLastPitchOfAB&&p.abResult){
-        resolveAtBat(p.abResult,p.abRbi);
+      // If this was the last pitch of an at-bat, resolve it after a delay so pitch result is visible
+      const hasAbResult=p.isLastPitchOfAB&&p.abResult;
+      if(hasAbResult){
+        setTimeout(()=>{resolveAtBat(p.abResult,p.abRbi)},1200);
       }
       practiceIdx++;
       updatePctlInfo();
       // Schedule or wait for next pitch
+      const reEnableDelay=hasAbResult?3500:0;
       if(practiceIdx<practicePitches.length){
+        setTimeout(()=>{
         // Re-enable pitch predictions but not at-bat (stays locked if locked)
         setPred(true);resetPitchState();
         if(abState!=='locked'&&abState!=='result'){
@@ -2732,6 +2792,7 @@ function practiceNextPitch(){
           },1000);
         }
         practiceAutoCheck();
+        },reEnableDelay);
       }
     }
   },800);
@@ -2819,9 +2880,12 @@ function updateDynamicBg(dt){
 function getFetchInterval(){return parseInt($('delaySlider').value)===0?1200:2500}
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){clearTimeout(S.fetchInterval);clearInterval(S.queueInterval)}
-  else if(S.gameActive){fetchLoop();S.queueInterval=setInterval(processQueue,300)}
+  else if(S.gameActive){
+    if(S.isMultiplayer&&S.isHost){mpHostFetch()}
+    else if(!S.isMultiplayer&&!practiceMode){fetchLoop();S.queueInterval=setInterval(processQueue,300)}
+  }
 });
-window.addEventListener('beforeunload',()=>{if(S.userScore>0){saveLB();saveUserStats()}mpDisconnect()});
+window.addEventListener('beforeunload',()=>{if(S.userScore>0){saveLB();saveUserStats()}});
 // Auth handles initial screen — don't show home until logged in
 </script>
 </body>
