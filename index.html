@@ -1861,8 +1861,12 @@ function abLock(){
   document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
   if(navigator.vibrate)navigator.vibrate([30,20,30]);
   updateReadyIndicators();
-  // If pitch was already selected but not locked, lock it now that at-bat is locked
+  // If pitch was already selected but not locked, lock it now — BUT only if user actually picked one this round
   if(S.userPick&&!pitchLocked){lockPitchPick()}
+  else if(!S.userPick&&S.isMultiplayer){
+    // MP: at-bat locked but no pitch yet — keep pitch buttons enabled so user can pick
+    $('statusBar').textContent='\uD83D\uDD12 At-Bat locked \u2014 now pick your pitch call!';$('statusBar').className='status-bar';
+  }
   if(practiceMode)practiceAutoCheck();
   mpCheckReady();
 }
