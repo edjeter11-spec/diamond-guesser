@@ -1302,7 +1302,7 @@ function mpRunCountdown(pitch){
       clearInterval(mpCountdownTimer);mpCountdownTimer=null;
       mpCountdownActive=false;
       resolvePitch(pitch);
-      if(pitch.isComplete&&pitch.abResult&&S.atBatResolved!==S.lastBatterId)resolveAtBat(pitch.abResult,pitch.abRbi||0);
+      if((pitch.isComplete||pitch.isLastPitchOfAB)&&pitch.abResult&&S.atBatResolved!==S.lastBatterId)resolveAtBat(pitch.abResult,pitch.abRbi||0);
       // Host: clean up Firebase for next pitch cycle
       if(S.isHost&&roomRef){roomRef.child('countdown').remove();roomRef.child('pendingPitch').remove()}
       // Re-enable after 2 seconds
@@ -2134,6 +2134,73 @@ let practiceGameData=null;
 // btnPractice removed — solo sim triggered from soloSim button
 $('btnMPPractice').addEventListener('click',()=>startPractice(true));
 
+// Extract pitches from allPlays and compute base state for each pitch
+function extractPracticeData(allPlays){
+  const pitches=[];
+  // Track base state across at-bats
+  let bases={first:null,second:null,third:null};
+  let prevHalf='',prevInning=0;
+  for(let p=0;p<allPlays.length;p++){
+    const play=allPlays[p];
+    const events=play.playEvents||[];
+    const batter=play.matchup&&play.matchup.batter?play.matchup.batter:{};
+    const pitcher=play.matchup&&play.matchup.pitcher?play.matchup.pitcher:{};
+    const inning=play.about?play.about.inning:0;
+    const half=play.about?play.about.halfInning:'';
+    const isComplete=play.about?play.about.isComplete:false;
+    const playResult=play.result?play.result.event:'';
+    const playRbi=play.result?play.result.rbi||0:0;
+    // Reset bases on half-inning change
+    if(half!==prevHalf||inning!==prevInning){bases={first:null,second:null,third:null};prevHalf=half;prevInning=inning}
+    let lastPitchIdx=-1;
+    for(let e=events.length-1;e>=0;e--){if(events[e].isPitch){lastPitchIdx=e;break}}
+    for(let e=0;e<events.length;e++){
+      const ev=events[e];if(!ev.isPitch)continue;
+      pitches.push({pitchNum:ev.pitchNumber,
+        desc:ev.details?ev.details.description:'?',
+        callCode:ev.details&&ev.details.call?ev.details.call.code:'',
+        typeCode:ev.details&&ev.details.type?ev.details.type.code:'',
+        typeDesc:ev.details&&ev.details.type?ev.details.type.description:'',
+        pX:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pX:null,
+        pZ:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pZ:null,
+        szTop:ev.pitchData?ev.pitchData.strikeZoneTop||3.5:3.5,szBot:ev.pitchData?ev.pitchData.strikeZoneBottom||1.5:1.5,
+        speed:ev.pitchData?ev.pitchData.startSpeed:null,
+        count:ev.count?ev.count.balls+'-'+ev.count.strikes:'',
+        countBalls:ev.count?ev.count.balls:0,countStrikes:ev.count?ev.count.strikes:0,countOuts:ev.count?ev.count.outs:0,
+        playResult:playResult,playRbi:playRbi,
+        batterName:batter.fullName||'',batterId:batter.id||0,
+        pitcherName:pitcher.fullName||'',pitcherId:pitcher.id||0,
+        inning:inning,half:half,
+        isLastPitchOfAB:e===lastPitchIdx&&isComplete,
+        abResult:isComplete?playResult:'',abRbi:playRbi,
+        // Base state at time of this pitch
+        r1:!!bases.first,r2:!!bases.second,r3:!!bases.third,
+        r1Name:bases.first||'',r2Name:bases.second||'',r3Name:bases.third||''});
+    }
+    // After at-bat completes, update bases from runner movements
+    // A runner can appear multiple times (e.g. advance then thrown out).
+    // Track each runner's final state — last entry wins.
+    if(isComplete&&play.runners&&play.runners.length){
+      const newBases={first:null,second:null,third:null};
+      const runnerFinal={};// runnerId -> {name, end, isOut}
+      play.runners.forEach(r=>{
+        const rid=r.details&&r.details.runner?r.details.runner.id:null;
+        const name=r.details&&r.details.runner?r.details.runner.fullName:'Runner';
+        if(rid)runnerFinal[rid]={name,end:r.movement?r.movement.end:null,isOut:r.movement?r.movement.isOut:false};
+      });
+      Object.values(runnerFinal).forEach(rf=>{
+        if(!rf.isOut&&rf.end){
+          if(rf.end==='1B')newBases.first=rf.name;
+          else if(rf.end==='2B')newBases.second=rf.name;
+          else if(rf.end==='3B')newBases.third=rf.name;
+        }
+      });
+      bases=newBases;
+    }
+  }
+  return pitches;
+}
+
 // Speed/mode buttons
 document.querySelectorAll('.practice-speed button').forEach(btn=>{
   btn.addEventListener('click',()=>{
@@ -2336,51 +2403,10 @@ async function startPractice(isMP){
     const gd=await r2.json();
     practiceGameData=gd;
 
-    // Extract ALL pitches from all plays in order
-    practicePitches=[];practiceIdx=0;
+    // Extract ALL pitches from all plays in order (with base state tracking)
+    practiceIdx=0;
     const allPlays=gd.liveData.plays.allPlays||[];
-    for(let p=0;p<allPlays.length;p++){
-      const play=allPlays[p];
-      const events=play.playEvents||[];
-      const batter=play.matchup&&play.matchup.batter?play.matchup.batter:{};
-      const pitcher=play.matchup&&play.matchup.pitcher?play.matchup.pitcher:{};
-      const inning=play.about?play.about.inning:0;
-      const half=play.about?play.about.halfInning:'';
-      const isComplete=play.about?play.about.isComplete:false;
-      const playResult=play.result?play.result.event:'';
-      const playRbi=play.result?play.result.rbi||0:0;
-
-      // Find the index of the last pitch event in this at-bat
-      let lastPitchIdx=-1;
-      for(let e=events.length-1;e>=0;e--){if(events[e].isPitch){lastPitchIdx=e;break}}
-      for(let e=0;e<events.length;e++){
-        const ev=events[e];
-        if(!ev.isPitch)continue;
-        practicePitches.push({
-          pitchNum:ev.pitchNumber,
-          desc:ev.details?ev.details.description:'?',
-          callCode:ev.details&&ev.details.call?ev.details.call.code:'',
-          typeCode:ev.details&&ev.details.type?ev.details.type.code:'',
-          typeDesc:ev.details&&ev.details.type?ev.details.type.description:'',
-          pX:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pX:null,
-          pZ:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pZ:null,
-          szTop:ev.pitchData?ev.pitchData.strikeZoneTop||3.5:3.5,
-          szBot:ev.pitchData?ev.pitchData.strikeZoneBottom||1.5:1.5,
-          speed:ev.pitchData?ev.pitchData.startSpeed:null,
-          count:ev.count?ev.count.balls+'-'+ev.count.strikes:'',
-          countBalls:ev.count?ev.count.balls:0,
-          countStrikes:ev.count?ev.count.strikes:0,
-          countOuts:ev.count?ev.count.outs:0,
-          playResult:playResult,playRbi:playRbi,
-          // At-bat context
-          batterName:batter.fullName||'',batterId:batter.id||0,
-          pitcherName:pitcher.fullName||'',pitcherId:pitcher.id||0,
-          inning:inning,half:half,
-          isLastPitchOfAB:e===lastPitchIdx&&isComplete,
-          abResult:isComplete?playResult:'',abRbi:playRbi
-        });
-      }
-    }
+    practicePitches=extractPracticeData(allPlays);
 
     console.log('Practice: loaded '+practicePitches.length+' pitches from '+allPlays.length+' at-bats for game '+gamePk);
     if(practicePitches.length<50){
@@ -2391,36 +2417,9 @@ async function startPractice(isMP){
         const g2=alt[Math.floor(Math.random()*alt.length)];
         const r3=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+g2.gamePk+'/feed/live');
         const gd2=await r3.json();
-        practiceGameData=gd2;practicePitches=[];
+        practiceGameData=gd2;
         const ap2=gd2.liveData.plays.allPlays||[];
-        for(let p2=0;p2<ap2.length;p2++){
-          const play=ap2[p2];const events=play.playEvents||[];
-          const batter=play.matchup&&play.matchup.batter?play.matchup.batter:{};
-          const pitcher=play.matchup&&play.matchup.pitcher?play.matchup.pitcher:{};
-          const inning=play.about?play.about.inning:0;const half=play.about?play.about.halfInning:'';
-          const isComplete=play.about?play.about.isComplete:false;
-          const playResult=play.result?play.result.event:'';const playRbi=play.result?play.result.rbi||0:0;
-          let lastPitchIdx=-1;
-          for(let e=events.length-1;e>=0;e--){if(events[e].isPitch){lastPitchIdx=e;break}}
-          for(let e=0;e<events.length;e++){
-            const ev=events[e];if(!ev.isPitch)continue;
-            practicePitches.push({pitchNum:ev.pitchNumber,desc:ev.details?ev.details.description:'?',
-              callCode:ev.details&&ev.details.call?ev.details.call.code:'',
-              typeCode:ev.details&&ev.details.type?ev.details.type.code:'',
-              typeDesc:ev.details&&ev.details.type?ev.details.type.description:'',
-              pX:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pX:null,
-              pZ:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pZ:null,
-              szTop:ev.pitchData?ev.pitchData.strikeZoneTop||3.5:3.5,szBot:ev.pitchData?ev.pitchData.strikeZoneBottom||1.5:1.5,
-              speed:ev.pitchData?ev.pitchData.startSpeed:null,
-              count:ev.count?ev.count.balls+'-'+ev.count.strikes:'',
-              countBalls:ev.count?ev.count.balls:0,countStrikes:ev.count?ev.count.strikes:0,countOuts:ev.count?ev.count.outs:0,
-              playResult:playResult,playRbi:playRbi,
-              batterName:batter.fullName||'',batterId:batter.id||0,
-              pitcherName:pitcher.fullName||'',pitcherId:pitcher.id||0,
-              inning:inning,half:half,
-              isLastPitchOfAB:e===lastPitchIdx&&isComplete,abResult:isComplete?playResult:'',abRbi:playRbi});
-          }
-        }
+        practicePitches=extractPracticeData(ap2);
         console.log('Retry: loaded '+practicePitches.length+' pitches from game '+g2.gamePk);
       }
     }
@@ -2466,6 +2465,13 @@ async function startPractice(isMP){
         S.currentCount={balls:0,strikes:0};
         S.currentOuts=p.countOuts;
         updateDynamicOdds(0,0);
+        // Show bases for first pitch
+        const r1=p.r1||false,r2=p.r2||false,r3=p.r3||false;
+        let rCount=0;if(r1)rCount++;if(r2)rCount++;if(r3)rCount++;
+        S.runnersOn=rCount;S.runnersOnSecond=r2;S.runnersOnThird=r3;
+        renderBases(r1,r2,r3,{first:r1?{fullName:p.r1Name||'Runner'}:null,second:r2?{fullName:p.r2Name||'Runner'}:null,third:r3?{fullName:p.r3Name||'Runner'}:null});
+        $('rbiRow').style.display=rCount>0?'flex':'none';
+        $('rbiRowAB').style.display=rCount>0?'flex':'none';
       }
       $('statusBar').textContent='\uD83C\uDFAF '+practicePitches.length+' pitches loaded \u2014 pick at-bat + pitch call!';$('statusBar').className='status-bar';
       // Start 20-second auto-skip for auto/fast modes
@@ -2510,7 +2516,8 @@ function mpPracticeSendNextPitch(){
     pitcherName:p.pitcherName,pitcherId:p.pitcherId,
     batterName:p.batterName,batterId:p.batterId,
     balls:p.countBalls,strikes:p.countStrikes,outs:p.countOuts,
-    r1:false,r2:false,r3:false,r1Name:'',r2Name:'',r3Name:''
+    r1:p.r1||false,r2:p.r2||false,r3:p.r3||false,
+    r1Name:p.r1Name||'',r2Name:p.r2Name||'',r3Name:p.r3Name||''
   };
   roomRef.child('gameState').set(gs);
   // Store the pitch as pending — wait for all ready
@@ -2656,6 +2663,14 @@ function practiceNextPitch(){
   const arrow=p.half==='top'?'\u25B2':'\u25BC';
   $('inningBadge').textContent=arrow+' '+ordinal(p.inning);
   S.currentInning=p.inning;
+
+  // Update bases from pitch data
+  const r1=p.r1||false,r2=p.r2||false,r3=p.r3||false;
+  let rCount=0;if(r1)rCount++;if(r2)rCount++;if(r3)rCount++;
+  S.runnersOn=rCount;S.runnersOnSecond=r2;S.runnersOnThird=r3;
+  renderBases(r1,r2,r3,{first:r1?{fullName:p.r1Name||'Runner'}:null,second:r2?{fullName:p.r2Name||'Runner'}:null,third:r3?{fullName:p.r3Name||'Runner'}:null});
+  $('rbiRow').style.display=rCount>0?'flex':'none';
+  $('rbiRowAB').style.display=rCount>0&&!S.atBatPick?'flex':'none';
 
   // DON'T update count here — it spoils the pitch result
   // Count will update inside resolvePitch after the 3-2-1 countdown
