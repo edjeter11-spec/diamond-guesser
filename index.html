@@ -1089,7 +1089,7 @@ function startGame(gameId,away,home,awayId,homeId){
   else{$('soloScores').style.display='';$('mpScores').style.display='none';document.querySelector('.delay-bar').style.display=''}
 
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');startTicker();renderGameLB();
-  feedBuffer=[];firstFeedApplied=false;mpLastPitchNum=0;mpPendingPitch=null;mpCountdownActive=false;
+  feedBuffer=[];firstFeedApplied=false;mpLastPitchNum=0;mpPendingPitch=null;mpCountdownActive=false;mpResultShowing=false;
   clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
 
   if(practiceMode){
@@ -1108,7 +1108,7 @@ function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterv
 /* ══════════════════════════════════════
    MULTIPLAYER SYNC — Host drives everything
    ══════════════════════════════════════ */
-let mpCountdownTimer=null;let mpPendingPitch=null;let mpCountdownActive=false;let mpLastPitchNum=0;
+let mpCountdownTimer=null;let mpPendingPitch=null;let mpCountdownActive=false;let mpLastPitchNum=0;let mpResultShowing=false;
 
 // HOST: fetch API, broadcast state, wait for all ready, trigger countdown
 function mpHostStart(){
@@ -1136,8 +1136,8 @@ function mpHostStart(){
 
 async function mpHostFetch(){
   if(!S.gameActive||!S.isMultiplayer)return;
-  // Don't fetch while a pitch is pending or countdown is active
-  if(mpPendingPitch||mpCountdownActive){S.fetchInterval=setTimeout(mpHostFetch,2000);return}
+  // Don't fetch while a pitch is pending, countdown is active, or result is showing
+  if(mpPendingPitch||mpCountdownActive||mpResultShowing){S.fetchInterval=setTimeout(mpHostFetch,2000);return}
   try{
     const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+S.gameId+'/feed/live?fields=gameData,datetime,firstPitch,dateTime,status,detailedState,teams,away,home,name,abbreviation,id,liveData,linescore,currentInning,inningHalf,inningState,teams,away,home,runs,offense,first,second,third,fullName,batter,onDeck,inHole,defense,pitcher,plays,currentPlay,matchup,pitcher,batter,fullName,id,count,balls,strikes,outs,about,isComplete,inning,halfInning,result,event,eventType,description,rbi,awayScore,homeScore,isScoringPlay,playEvents,isPitch,pitchNumber,details,description,call,code,type,code,description,pitchData,coordinates,pX,pZ,strikeZoneTop,strikeZoneBottom,startSpeed,allPlays,scoringPlays');
     if(!r.ok)throw new Error(r.status);
@@ -1231,8 +1231,8 @@ function mpApplyGameState(gs){
   if(gs.batterName)$('batterName').textContent=gs.batterName;
   if(gs.pitcherId)$('pitcherImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+gs.pitcherId+'/headshot/67/current';
   if(gs.batterId)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+gs.batterId+'/headshot/67/current';
-  // New batter?
-  if(gs.batterId&&gs.batterId!==S.lastBatterId){
+  // New batter? Block during countdown/result display so we don't wipe the at-bat result
+  if(gs.batterId&&gs.batterId!==S.lastBatterId&&!mpCountdownActive&&!mpResultShowing){
     const hadPick=S.atBatPick||null;const hadState=abState;
     S.lastBatterId=gs.batterId;S.currentCount={balls:0,strikes:0};S.currentOuts=gs.outs;
     // Only reset at-bat if previous was resolved or no pick
@@ -1244,6 +1244,8 @@ function mpApplyGameState(gs){
     updateDynamicOdds(0,0);
     setPred(true);resetPitchState();
     $('statusBar').textContent='\uD83C\uDFAF '+gs.batterName+' is up \u2014 make your call!';$('statusBar').className='status-bar';
+  }else if(gs.batterId&&gs.batterId!==S.lastBatterId&&(mpCountdownActive||mpResultShowing)){
+    // New batter detected but we're still showing results — defer, don't update yet
   }else{
     // Same batter — DON'T update count dots (spoiler). Count updates in resolvePitch.
     updateDynamicOdds(S.currentCount.balls,S.currentCount.strikes);
@@ -1314,12 +1316,12 @@ function mpApplyGameState(gs){
   if(gs.detState==='Final'||gs.detState==='Game Over'){
     if(S.gameActive){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}setTimeout(showEndGame,2000)}
   }
-  // At-bat complete? In MP, only resolve AFTER countdown is done (not during it).
+  // At-bat complete? In MP, only resolve AFTER countdown is done and result isn't already showing.
   // The countdown handler also checks isComplete, but sometimes the API updates
   // isComplete on a later fetch after the pitch was already captured.
   if(gs.abComplete&&S.atBatResolved!==gs.batterId){
-    if(!S.isMultiplayer||!mpCountdownActive){
-      // Solo mode: resolve immediately. MP: resolve only if countdown is done.
+    if(!S.isMultiplayer||(!mpCountdownActive&&!mpResultShowing)){
+      // Solo mode: resolve immediately. MP: resolve only if countdown is done and no result showing.
       resolveAtBat(gs.abComplete,gs.abRbi||0);
     }
   }
@@ -1347,13 +1349,17 @@ function mpRunCountdown(pitch){
       resolvePitch(pitch);
       const hasAbResult=(pitch.isComplete||pitch.isLastPitchOfAB)&&pitch.abResult&&S.atBatResolved!==S.lastBatterId;
       if(hasAbResult){
+        // Lock the UI so new batter data doesn't wipe the result
+        mpResultShowing=true;
         // Delay at-bat resolve slightly so pitch result is visible first
         setTimeout(()=>{resolveAtBat(pitch.abResult,pitch.abRbi||0)},1200);
+        // Clear the result lock after enough time to see both pitch + at-bat results
+        setTimeout(()=>{mpResultShowing=false},4500);
       }
       // Host: clean up Firebase for next pitch cycle
       if(S.isHost&&roomRef){roomRef.child('countdown').remove();roomRef.child('pendingPitch').remove()}
       // Re-enable picks — give more time if at-bat just resolved so result is visible
-      const reEnableDelay=hasAbResult?4000:2000;
+      const reEnableDelay=hasAbResult?4500:2000;
       setTimeout(()=>{if(S.gameActive&&!S.gamePaused){setPred(true);resetPitchState()}},reEnableDelay);
     }
   },800);
