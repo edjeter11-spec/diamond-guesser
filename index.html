@@ -788,7 +788,7 @@ function saveUserStats(){
 const S={gameId:null,gameActive:false,userScore:0,cpuScore:0,streak:0,bestStreak:0,
   userPick:'',cpuPick:'',rbiPick:false,rbiPickCPU:false,
   pitchTypePick:'',pitchTypeCPU:'',
-  atBatPick:'',atBatCPU:'',atBatRbiPick:false,lastBatterId:0,atBatResolved:false,
+  atBatPick:'',atBatCPU:'',atBatRbiPick:false,lastBatterId:0,atBatResolved:0,
   lastPitchNum:0,pendingPitches:[],halfTimeShown:false,pitchHistory:[],
   awayTeam:'',homeTeam:'',awayId:0,homeId:0,fetchInterval:null,queueInterval:null,
   runnersOn:0,runnersOnSecond:false,runnersOnThird:false,
@@ -1022,7 +1022,7 @@ function startGame(gameId,away,home,awayId,homeId){
   Object.assign(S,{gameId,awayTeam:away,homeTeam:home,awayId:awayId||0,homeId:homeId||0,
     gameActive:true,gamePaused:false,
     userScore:0,cpuScore:0,streak:0,bestStreak:0,userPick:'',cpuPick:'',
-    pitchTypePick:'',pitchTypeCPU:'',atBatPick:'',atBatCPU:'',atBatRbiPick:false,lastBatterId:0,atBatResolved:false,
+    pitchTypePick:'',pitchTypeCPU:'',atBatPick:'',atBatCPU:'',atBatRbiPick:false,lastBatterId:0,atBatResolved:0,
     rbiPick:false,rbiPickCPU:false,lastPitchNum:0,pendingPitches:[],halfTimeShown:false,pitchHistory:[],
     correctCount:0,totalPredictions:0,pitchCount:0,
     currentCount:{balls:0,strikes:0},currentOuts:0,currentInning:0,runnersOn:0,runnersOnSecond:false,runnersOnThird:false});
@@ -1236,7 +1236,7 @@ function mpApplyGameState(gs){
     if(S.gameActive){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}setTimeout(showEndGame,2000)}
   }
   // At-bat complete?
-  if(gs.abComplete&&!S.atBatResolved){resolveAtBat(gs.abComplete,gs.abRbi||0)}
+  if(gs.abComplete&&S.atBatResolved!==gs.batterId){resolveAtBat(gs.abComplete,gs.abRbi||0)}
 }
 
 // Shared: synced countdown then resolve
@@ -1257,7 +1257,7 @@ function mpRunCountdown(pitch){
       mpCountdownActive=false;
       // Resolve for everyone at the same time
       resolvePitch(pitch);
-      if(pitch.isComplete&&pitch.abResult&&!S.atBatResolved)resolveAtBat(pitch.abResult,pitch.abRbi||0);
+      if(pitch.isComplete&&pitch.abResult&&S.atBatResolved!==S.lastBatterId)resolveAtBat(pitch.abResult,pitch.abRbi||0);
       // Clear countdown from Firebase so it doesn't re-trigger
       if(S.isHost&&roomRef){roomRef.child('countdown').remove();roomRef.child('pendingPitch').remove()}
       // Re-enable picks for next pitch after a beat
@@ -1450,7 +1450,10 @@ function applyDelayedFeed(d){
   if(inning>=5&&!S.halfTimeShown)showHalftime(inning,half);
 
   // At-bat result
-  if(cp&&cp.about&&cp.about.isComplete&&cp.result&&cp.result.event&&!S.atBatResolved)resolveAtBat(cp.result.event,cp.result.rbi||0);
+  if(cp&&cp.about&&cp.about.isComplete&&cp.result&&cp.result.event){
+    const abBatterId=cp.matchup&&cp.matchup.batter?cp.matchup.batter.id:0;
+    if(S.atBatResolved!==abBatterId)resolveAtBat(cp.result.event,cp.result.rbi||0);
+  }
 
   // Detect game over
   if(detState==='Final'||detState==='Game Over'){
@@ -1705,7 +1708,7 @@ function abReset(){
   // Called ONLY when new batter is confirmed by API
   abState='open';
   if(abLockTimer){clearInterval(abLockTimer);abLockTimer=null}
-  S.atBatPick='';S.atBatCPU='';S.atBatRbiPick=false;S.atBatResolved=false;
+  S.atBatPick='';S.atBatCPU='';S.atBatRbiPick=false;// Don't reset atBatResolved — it tracks which batter was last resolved to prevent re-resolve
   $('atbatCard').classList.remove('locked');$('atbatLockedMsg').textContent='';$('atbatLockedMsg').style.display='';
   document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
   $('rbiToggleAB').classList.remove('on');$('rbiRowAB').style.display=S.runnersOn>0?'flex':'none';
@@ -1715,7 +1718,7 @@ function abReset(){
 
 const AB_SCORES={Strikeout:25,Walk:30,Groundout:20,Flyout:20,Single:50,Double:100,Triple:200,'Home Run':250};
 function resolveAtBat(event,rbi){
-  S.atBatResolved=true;abState='result';
+  S.atBatResolved=S.lastBatterId;abState='result';
   let ev=event;
   if(ev.includes('Strikeout')||ev.includes('Strikes out'))ev='Strikeout';
   else if(ev.includes('Walk'))ev='Walk';
@@ -1755,9 +1758,10 @@ function resolveAtBat(event,rbi){
     if(got){playSound(ev==='Home Run'?'homer':'correct');if(ev==='Home Run')triggerConfetti()}else{playSound('wrong');triggerShake()}
   }
   mpSendScore(S.atBatPick?'AB:'+S.atBatPick:null,S.atBatPick?uPts>0:null);
-  // Auto-clear result after 6 seconds so next at-bat card opens
+  // Auto-clear result after 6 seconds — but only if we're still on the same batter
+  const resolvedBatter=S.lastBatterId;
   setTimeout(()=>{
-    if(abState==='result'){
+    if(abState==='result'&&S.lastBatterId===resolvedBatter){
       abReset();
       if(S.gameActive)document.querySelector('.atbat-card-header span').textContent='\uD83C\uDFAF Predict the Next At-Bat';
     }
@@ -1840,7 +1844,7 @@ function resolvePitch(p){
    STRIKE ZONE VIZ
    ══════════════════════════════════════ */
 let abSequence=[];let totalPitchCount=0;
-function clearZone(){$('pitchDots').innerHTML='';S.pitchHistory=[];S.pitchCount=0;abSequence=[];renderSequence();$('piType').textContent='—';$('piSpeed').textContent='—';$('piResult').textContent='—'}
+function clearZone(){$('pitchDots').innerHTML='';S.pitchHistory=[];S.pitchCount=0;abSequence=[];renderSequence();$('piType').textContent='—';$('piSpeed').textContent='—';$('piResult').textContent='—';totalPitchCount=0;$('piCount').textContent='0'}
 function clearPitchInfo(){abSequence=[];$('piSequence').innerHTML='';$('piType').textContent='—';$('piSpeed').textContent='—';$('piResult').textContent='—'}
 function updatePitchInfo(p){
   // Update last pitch info
