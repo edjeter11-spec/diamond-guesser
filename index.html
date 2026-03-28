@@ -1046,7 +1046,7 @@ function startGame(gameId,away,home,awayId,homeId){
   else{$('soloScores').style.display='';$('mpScores').style.display='none'}
 
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');startTicker();renderGameLB();
-  feedBuffer=[];firstFeedApplied=false;
+  feedBuffer=[];firstFeedApplied=false;mpFirstFeed=false;
   clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
 
   if(practiceMode){
@@ -1065,7 +1065,7 @@ function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterv
 /* ══════════════════════════════════════
    MULTIPLAYER SYNC — Host drives everything
    ══════════════════════════════════════ */
-let mpCountdownTimer=null;let mpPendingPitch=null;let mpCountdownActive=false;let mpLastCountdownTime=0;
+let mpCountdownTimer=null;let mpPendingPitch=null;let mpCountdownActive=false;let mpLastCountdownTime=0;let mpFirstFeed=false;
 
 // HOST: fetch API, broadcast state, wait for ready, resolve
 function mpHostStart(){
@@ -1115,8 +1115,11 @@ async function mpHostFetch(){
       if(off.third)gs.r3Name=off.third.fullName||'';
     }catch(e){}
 
-    // Broadcast game state
-    roomRef.child('gameState').set(gs);
+    // Broadcast game state — first load is instant, then delayed to match TV
+    const gsDelay=parseInt($('delaySlider').value)*1000;
+    if(!mpFirstFeed){mpFirstFeed=true;roomRef.child('gameState').set(gs);mpApplyGameState(gs)}
+    else if(gsDelay>0){setTimeout(()=>{roomRef.child('gameState').set(gs);mpApplyGameState(gs)},gsDelay)}
+    else{roomRef.child('gameState').set(gs);mpApplyGameState(gs)}
 
     // Check for new pitches
     if(cp){
@@ -1139,14 +1142,21 @@ async function mpHostFetch(){
             playResult:pr,playRbi:rbi,
             isComplete:cp.about&&cp.about.isComplete,abResult:cp.about&&cp.about.isComplete?pr:'',abRbi:rbi
           };
-          // Store pending pitch — wait for all ready
-          mpPendingPitch=pitch;
-          // Reset everyone's ready status
-          const players=S.mpPlayers;
-          Object.keys(players).forEach(pid=>{roomRef.child('players/'+pid+'/ready').set(false)});
-          // Broadcast that a pitch is pending
-          roomRef.child('pendingPitch').set({pitchNum:pn,desc:'Pitch #'+pn+' incoming...',time:Date.now()});
-          $('statusBar').textContent='\uD83D\uDCE1 Pitch #'+pn+' \u2014 waiting for all picks...';
+          // Apply TV delay before broadcasting to players
+          const mpDelay=parseInt($('delaySlider').value)*1000;
+          const broadcastPitch=()=>{
+            mpPendingPitch=pitch;
+            // Reset everyone's ready status
+            const players2=S.mpPlayers;
+            Object.keys(players2).forEach(pid=>{roomRef.child('players/'+pid+'/ready').set(false)});
+            // Broadcast that a pitch is pending
+            roomRef.child('pendingPitch').set({pitchNum:pn,desc:'Pitch #'+pn+' incoming...',time:Date.now()});
+            $('statusBar').textContent='\uD83D\uDCE1 Pitch #'+pn+' \u2014 waiting for all picks...';
+          };
+          if(mpDelay>0){
+            $('statusBar').textContent='\uD83D\uDCE1 Pitch #'+pn+' received — syncing to TV delay...';
+            setTimeout(broadcastPitch,mpDelay);
+          }else{broadcastPitch()}
         }
       }
       // At-bat complete check
@@ -1241,18 +1251,24 @@ function mpApplyGameState(gs){
 
 // Shared: synced countdown then resolve
 function mpRunCountdown(pitch){
-  // Guard: don't fire twice for the same countdown
-  if(mpCountdownActive)return;
+  // Guard: don't fire twice for the same pitch
+  if(mpCountdownActive&&mpLastCountdownTime>Date.now()-8000)return;
+  // Clear any stuck state
+  if(mpCountdownTimer){clearInterval(mpCountdownTimer);mpCountdownTimer=null}
   mpCountdownActive=true;
+  mpLastCountdownTime=Date.now();
   setPred(false);
   if(S.userPick&&!pitchLocked)lockPitchPick();
   if(navigator.vibrate)navigator.vibrate([100,50,100]);
   let sec=3;
-  $('statusBar').textContent='\u23F0 Pitch reveal in '+sec+'...';$('statusBar').className='status-bar';
-  if(mpCountdownTimer)clearInterval(mpCountdownTimer);
+  $('statusBar').textContent='\uD83D\uDD25 PITCH REVEAL IN '+sec+'...';$('statusBar').className='status-bar countdown';
   mpCountdownTimer=setInterval(()=>{
     sec--;
-    if(sec<=0){
+    if(sec>0){
+      $('statusBar').textContent='\uD83D\uDD25 PITCH REVEAL IN '+sec+'...';
+    }else if(sec===0){
+      $('statusBar').textContent='\u26BE HERE COMES THE PITCH!';
+    }else{
       clearInterval(mpCountdownTimer);mpCountdownTimer=null;
       mpCountdownActive=false;
       // Resolve for everyone at the same time
@@ -1261,11 +1277,16 @@ function mpRunCountdown(pitch){
       // Clear countdown from Firebase so it doesn't re-trigger
       if(S.isHost&&roomRef){roomRef.child('countdown').remove();roomRef.child('pendingPitch').remove()}
       // Re-enable picks for next pitch after a beat
-      setTimeout(()=>{if(S.gameActive&&!S.gamePaused){setPred(true);resetPitchState()}},2000);
-    }else{
-      $('statusBar').textContent='\u23F0 Pitch reveal in '+sec+'...';
+      setTimeout(()=>{
+        if(S.gameActive&&!S.gamePaused){setPred(true);resetPitchState()}
+        // Reset ready states for next pitch
+        if(S.isHost&&roomRef){
+          const players=S.mpPlayers;
+          Object.keys(players).forEach(pid=>{roomRef.child('players/'+pid+'/ready').set(false)});
+        }
+      },2000);
     }
-  },1000);
+  },800);
 }
 
 /* ══════════════════════════════════════
@@ -1592,16 +1613,16 @@ function predict(choice){
   const btnMap={Ball:'btnBall',Strike:'btnStrike',Foul:'btnFoul',Out:'btnOut',Homer:'btnHomer',Single:'btnHit',Double:'btnHit',Triple:'btnHit'};
   if(btnMap[choice])$(btnMap[choice]).classList.add('sel');
   if(navigator.vibrate)navigator.vibrate(20);
-  // In practice/sim mode: if at-bat is already locked, instantly lock pitch + start countdown
+  // If at-bat is already locked, auto-lock pitch immediately (all modes)
   const hasAB=abState==='locked'||abState==='result';
-  if(practiceMode&&hasAB){
+  if(hasAB){
     lockPitchPick();
     return;
   }
-  // In live mode or if at-bat not yet locked: show pitch type row and wait
+  // At-bat not yet locked: show pitch type row and wait
   $('ptypeRow').classList.add('open');
   const lbl=choice+(S.rbiPick?' +RBI':'');
-  $('statusBar').textContent='\uD83C\uDFAF '+lbl+' selected \u2014 change anytime or pick pitch type';$('statusBar').className='status-bar';
+  $('statusBar').textContent='\uD83C\uDFAF '+lbl+' selected \u2014 pick at-bat to lock in';$('statusBar').className='status-bar';
 }
 function lockPitchPick(){
   if(!S.userPick||pitchLocked)return;
@@ -1693,6 +1714,8 @@ function abLock(){
   document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
   if(navigator.vibrate)navigator.vibrate([30,20,30]);
   updateReadyIndicators();
+  // If pitch was already selected but not locked, lock it now that at-bat is locked
+  if(S.userPick&&!pitchLocked){lockPitchPick()}
   if(practiceMode)practiceAutoCheck();
   mpCheckReady();
 }
