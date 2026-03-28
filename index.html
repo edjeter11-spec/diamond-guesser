@@ -1089,7 +1089,7 @@ function startGame(gameId,away,home,awayId,homeId){
   else{$('soloScores').style.display='';$('mpScores').style.display='none';document.querySelector('.delay-bar').style.display=''}
 
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');startTicker();renderGameLB();
-  feedBuffer=[];firstFeedApplied=false;mpLastPitchNum=0;mpPendingPitch=null;mpCountdownActive=false;mpResultShowing=false;
+  feedBuffer=[];firstFeedApplied=false;mpLastPitchNum=0;mpPendingPitch=null;mpCountdownActive=false;mpResultShowing=false;mpFirstFetch=true;midAtBatLocked=false;soloFirstExtract=true;
   clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
 
   if(practiceMode){
@@ -1108,7 +1108,7 @@ function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterv
 /* ══════════════════════════════════════
    MULTIPLAYER SYNC — Host drives everything
    ══════════════════════════════════════ */
-let mpCountdownTimer=null;let mpPendingPitch=null;let mpCountdownActive=false;let mpLastPitchNum=0;let mpResultShowing=false;
+let mpCountdownTimer=null;let mpPendingPitch=null;let mpCountdownActive=false;let mpLastPitchNum=0;let mpResultShowing=false;let mpFirstFetch=true;let midAtBatLocked=false;
 
 // HOST: fetch API, broadcast state, wait for all ready, trigger countdown
 function mpHostStart(){
@@ -1187,28 +1187,56 @@ async function mpHostFetch(){
 
     // Check for new pitch
     if(cp&&cp.playEvents&&cp.playEvents.length){
-      for(let i=0;i<cp.playEvents.length;i++){
-        const ev=cp.playEvents[i];if(!ev.isPitch)continue;
-        const pn=ev.pitchNumber;if(pn<=mpLastPitchNum)continue;
-        mpLastPitchNum=pn;
-        const pr=cp.result?cp.result.event||'':'';const rbi=cp.result?cp.result.rbi||0:0;
-        mpPendingPitch={pitchNum:pn,desc:ev.details?ev.details.description:'?',
-          callCode:ev.details&&ev.details.call?ev.details.call.code:'',
-          typeCode:ev.details&&ev.details.type?ev.details.type.code:'',
-          typeDesc:ev.details&&ev.details.type?ev.details.type.description:'',
-          pX:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pX:0,
-          pZ:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pZ:0,
-          szTop:ev.pitchData?ev.pitchData.strikeZoneTop||3.5:3.5,szBot:ev.pitchData?ev.pitchData.strikeZoneBottom||1.5:1.5,
-          speed:ev.pitchData?ev.pitchData.startSpeed||0:0,
-          countBalls:ev.count?ev.count.balls:0,countStrikes:ev.count?ev.count.strikes:0,countOuts:ev.count?ev.count.outs:0,
-          playResult:pr,playRbi:rbi,
-          isComplete:cp.about&&cp.about.isComplete,abResult:cp.about&&cp.about.isComplete?pr:'',abRbi:rbi};
-        // Reset everyone's ready and notify
-        Object.keys(S.mpPlayers).forEach(pid=>{roomRef.child('players/'+pid+'/ready').set(false)});
-        roomRef.child('pendingPitch').set({n:pn,t:Date.now()});
-        setPred(true);resetPitchState();
-        $('statusBar').textContent='\uD83D\uDCE1 Pitch #'+pn+' \u2014 make your picks!';$('statusBar').className='status-bar';
+      // First fetch: skip all existing pitches — we joined mid-at-bat
+      if(mpFirstFetch){
+        mpFirstFetch=false;
+        // Set mpLastPitchNum to the highest existing pitch so we don't replay them
+        let maxPn=0;
+        for(let i=0;i<cp.playEvents.length;i++){
+          const ev=cp.playEvents[i];if(ev.isPitch&&ev.pitchNumber>maxPn)maxPn=ev.pitchNumber;
+        }
+        if(maxPn>0){
+          mpLastPitchNum=maxPn;
+          // Lock predictions — at-bat is in progress, wait for next batter
+          midAtBatLocked=true;
+          setPred(false);
+          document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
+          $('statusBar').textContent='\u23F8 At-bat in progress \u2014 waiting for next batter...';$('statusBar').className='status-bar paused';
+          // Broadcast lock state for clients
+          roomRef.child('midAtBatLocked').set(true);
+        }
+        // If no pitches yet (0-0 count, fresh batter), allow predictions
+        if(maxPn===0){
+          roomRef.child('midAtBatLocked').set(false);
+        }
+      }else{
+        for(let i=0;i<cp.playEvents.length;i++){
+          const ev=cp.playEvents[i];if(!ev.isPitch)continue;
+          const pn=ev.pitchNumber;if(pn<=mpLastPitchNum)continue;
+          mpLastPitchNum=pn;
+          // If we were locked from mid-at-bat join, we're now seeing a NEW pitch — unlock
+          if(midAtBatLocked){midAtBatLocked=false;roomRef.child('midAtBatLocked').set(false)}
+          const pr=cp.result?cp.result.event||'':'';const rbi=cp.result?cp.result.rbi||0:0;
+          mpPendingPitch={pitchNum:pn,desc:ev.details?ev.details.description:'?',
+            callCode:ev.details&&ev.details.call?ev.details.call.code:'',
+            typeCode:ev.details&&ev.details.type?ev.details.type.code:'',
+            typeDesc:ev.details&&ev.details.type?ev.details.type.description:'',
+            pX:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pX:0,
+            pZ:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pZ:0,
+            szTop:ev.pitchData?ev.pitchData.strikeZoneTop||3.5:3.5,szBot:ev.pitchData?ev.pitchData.strikeZoneBottom||1.5:1.5,
+            speed:ev.pitchData?ev.pitchData.startSpeed||0:0,
+            countBalls:ev.count?ev.count.balls:0,countStrikes:ev.count?ev.count.strikes:0,countOuts:ev.count?ev.count.outs:0,
+            playResult:pr,playRbi:rbi,
+            isComplete:cp.about&&cp.about.isComplete,abResult:cp.about&&cp.about.isComplete?pr:'',abRbi:rbi};
+          // Reset everyone's ready and notify
+          Object.keys(S.mpPlayers).forEach(pid=>{roomRef.child('players/'+pid+'/ready').set(false)});
+          roomRef.child('pendingPitch').set({n:pn,t:Date.now()});
+          setPred(true);resetPitchState();
+          $('statusBar').textContent='\uD83D\uDCE1 Pitch #'+pn+' \u2014 make your picks!';$('statusBar').className='status-bar';
+        }
       }
+    }else if(mpFirstFetch){
+      mpFirstFetch=false;// No pitches at all — fresh start
     }
   }catch(e){$('statusBar').textContent='\u26A0 API error \u2014 retrying...'}
   if(S.gameActive&&S.isMultiplayer)S.fetchInterval=setTimeout(mpHostFetch,2500);
@@ -1219,11 +1247,24 @@ function mpClientStart(){
   roomRef.child('gameState').on('value',snap=>{const gs=snap.val();if(gs)mpApplyGameState(gs)});
   roomRef.child('pendingPitch').on('value',snap=>{
     const pp=snap.val();if(!pp)return;
+    midAtBatLocked=false;// New pitch means we can predict
     setPred(true);resetPitchState();
     $('statusBar').textContent='\uD83D\uDCE1 Pitch #'+pp.n+' \u2014 make your picks!';$('statusBar').className='status-bar';
   });
   roomRef.child('countdown').on('value',snap=>{const cd=snap.val();if(cd&&cd.p)mpRunCountdown(cd.p)});
   roomRef.child('players').on('value',snap=>{S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores()});
+  // Mid-at-bat lock — host broadcasts this when joining mid-at-bat
+  roomRef.child('midAtBatLocked').on('value',snap=>{
+    const locked=snap.val();
+    if(locked){
+      midAtBatLocked=true;
+      setPred(false);
+      document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
+      $('statusBar').textContent='\u23F8 At-bat in progress \u2014 waiting for next batter...';$('statusBar').className='status-bar paused';
+    }else if(locked===false&&midAtBatLocked){
+      midAtBatLocked=false;
+    }
+  });
 }
 
 // Shared: apply game state to UI (used by BOTH host and client)
@@ -1240,6 +1281,9 @@ function mpApplyGameState(gs){
   if(gs.batterId&&gs.batterId!==S.lastBatterId&&!mpCountdownActive&&!mpResultShowing){
     const hadPick=S.atBatPick||null;const hadState=abState;
     S.lastBatterId=gs.batterId;S.currentCount={balls:0,strikes:0};S.currentOuts=gs.outs;
+    // Clear mid-at-bat lock — new batter means fresh start
+    midAtBatLocked=false;
+    if(S.isHost&&roomRef)roomRef.child('midAtBatLocked').set(false);
     // Only reset at-bat if previous was resolved or no pick
     if(hadState==='result'||!hadPick){abReset()}
     clearZone();
@@ -1248,6 +1292,8 @@ function mpApplyGameState(gs){
     const cd=$('countDisplay');if(cd)cd.innerHTML='<span>0</span>-<span>0</span> \u2022 '+gs.outs+' out';
     updateDynamicOdds(0,0);
     setPred(true);resetPitchState();
+    // Re-enable at-bat buttons for new batter
+    document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
     $('statusBar').textContent='\uD83C\uDFAF '+gs.batterName+' is up \u2014 make your call!';$('statusBar').className='status-bar';
   }else if(gs.batterId&&gs.batterId!==S.lastBatterId&&(mpCountdownActive||mpResultShowing)){
     // New batter detected but we're still showing results — defer, don't update yet
@@ -1395,14 +1441,30 @@ async function fetchGame(){
   setScoreLoading(false);
 }
 // Pull pitch events from feed without updating UI
+let soloFirstExtract=true;
 function extractPitches(d){
   if(!d||!d.liveData)return;
   const cp=d.liveData.plays&&d.liveData.plays.currentPlay;
   if(!cp)return;
   const events=cp.playEvents;if(!events||!events.length)return;
+  // First extract: skip all existing pitches — at-bat is already in progress
+  if(soloFirstExtract){
+    soloFirstExtract=false;
+    let maxPn=0;
+    for(let i=0;i<events.length;i++){const ev=events[i];if(ev.isPitch&&ev.pitchNumber>maxPn)maxPn=ev.pitchNumber}
+    if(maxPn>0){
+      S.lastPitchNum=maxPn;
+      midAtBatLocked=true;
+      setPred(false);
+      document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
+      $('statusBar').textContent='\u23F8 At-bat in progress \u2014 waiting for next pitch...';$('statusBar').className='status-bar paused';
+      return;
+    }
+  }
   for(let i=0;i<events.length;i++){
     const ev=events[i];if(!ev.isPitch)continue;const pn=ev.pitchNumber;if(pn<=S.lastPitchNum)continue;
     S.lastPitchNum=pn;
+    if(midAtBatLocked)midAtBatLocked=false;// New pitch after join — unlock
     const pr=cp.result?cp.result.event||'':'';const rbi=cp.result?cp.result.rbi||0:0;
     S.pendingPitches.push({pitchNum:pn,time:Date.now()/1000,
       desc:ev.details?ev.details.description:'?',
@@ -1513,6 +1575,8 @@ function applyDelayedFeed(d){
     if(batterId&&batterId!==S.lastBatterId){
       // New batter — reset pitch counter so pitch #1 isn't skipped
       S.lastPitchNum=0;
+      // Clear mid-at-bat lock — new batter means fresh start
+      midAtBatLocked=false;
       // Preserve any existing at-bat pick (open OR locked) for the new batter
       const hadPick=S.atBatPick||null;
       const hadState=abState;
