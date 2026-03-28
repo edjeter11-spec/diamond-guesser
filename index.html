@@ -1046,7 +1046,7 @@ function startGame(gameId,away,home,awayId,homeId){
   else{$('soloScores').style.display='';$('mpScores').style.display='none'}
 
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');startTicker();renderGameLB();
-  feedBuffer=[];
+  feedBuffer=[];firstFeedApplied=false;
   clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
 
   if(practiceMode){
@@ -1211,8 +1211,11 @@ function mpApplyGameState(gs){
   if(gs.batterId)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+gs.batterId+'/headshot/67/current';
   // New batter?
   if(gs.batterId&&gs.batterId!==S.lastBatterId){
+    const hadPick=S.atBatPick||null;const hadState=abState;
     S.lastBatterId=gs.batterId;S.currentCount={balls:0,strikes:0};S.currentOuts=gs.outs;
-    abReset();clearZone();
+    // Only reset at-bat if previous was resolved or no pick
+    if(hadState==='result'||!hadPick){abReset()}
+    clearZone();
     // New batter always starts 0-0 — not a spoiler to show this
     renderCountDots(0,0,gs.outs);
     const cd=$('countDisplay');if(cd)cd.innerHTML='<span>0</span>-<span>0</span> \u2022 '+gs.outs+' out';
@@ -1269,7 +1272,7 @@ function mpRunCountdown(pitch){
    FETCH + DELAYED FEED
    ══════════════════════════════════════ */
 // Buffer entire API responses — only apply after TV delay
-let feedBuffer=[];
+let feedBuffer=[];let firstFeedApplied=false;
 async function fetchLoop(){
   if(!S.gameActive)return;
   await fetchGame();
@@ -1406,17 +1409,23 @@ function applyDelayedFeed(d){
     if(cp.matchup.batter&&cp.matchup.batter.id)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+cp.matchup.batter.id+'/headshot/67/current';
     const batterId=cp.matchup.batter?cp.matchup.batter.id:0;
     if(batterId&&batterId!==S.lastBatterId){
-      const hadPrePick=(abState==='open'&&S.atBatPick)?S.atBatPick:null;
+      // Preserve any existing at-bat pick (open OR locked) for the new batter
+      const hadPick=S.atBatPick||null;
+      const hadState=abState;
       S.lastBatterId=batterId;
       S.currentCount={balls:0,strikes:0};
-      // Always fully reset the at-bat card on new batter
-      abReset();
-      if(hadPrePick){
-        // Had a pre-pick from break — restore it and start 3-sec countdown
-        S.atBatPick=hadPrePick;
-        // Re-highlight the button
-        document.querySelectorAll('.ab-btn').forEach(b=>{if(b.dataset.ab===hadPrePick)b.classList.add('sel')});
-        abStartCountdown();
+      // Only reset at-bat if previous was resolved or no pick existed
+      if(hadState==='result'||!hadPick){
+        abReset();
+      }else if(hadPick){
+        // Preserve the locked/open pick — don't reset it
+        // Just update the header to show new batter name
+        const bName=cp.matchup.batter?cp.matchup.batter.fullName:'';
+        if(hadState==='locked'){
+          $('atbatLockedMsg').textContent='\uD83D\uDD12 At-Bat: '+hadPick+(S.atBatRbiPick?' + RBI':'');
+        }else{
+          document.querySelector('.atbat-card-header span').textContent='\u26A1 Predict: '+bName+"'s At-Bat";
+        }
       }
       clearZone();renderCountDots(0,0,S.currentOuts);
       const cd=$('countDisplay');if(cd)cd.innerHTML='<span>0</span>-<span>0</span> \u2022 '+S.currentOuts+' out';
@@ -1525,6 +1534,15 @@ function processQueue(){
   if(!S.gameActive)return;const delay=parseInt($('delaySlider').value),now=Date.now()/1000;
   // Effective delay = max(slider, minimum prediction window)
   const effectiveDelay=Math.max(delay,MIN_PREDICT_WINDOW);
+  // FIRST LOAD: apply the very first feed snapshot immediately (no delay)
+  // so the user sees the game state as soon as they tap in
+  if(!firstFeedApplied&&feedBuffer.length>0){
+    firstFeedApplied=true;
+    const firstData=feedBuffer[feedBuffer.length-1].data;
+    feedBuffer=[];// Clear buffer since we're applying latest
+    applyDelayedFeed(firstData);
+    return;// Don't process pitches on first load — just show the game state
+  }
   // Apply delayed feed snapshots (scoreboard, matchup, bases, inning — everything visible)
   // Feed snapshots use the raw delay (show matchup/inning updates sooner so user can predict)
   let lastReady=null;
