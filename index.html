@@ -1236,7 +1236,7 @@ function mpApplyGameState(gs){
     if(S.gameActive){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}setTimeout(showEndGame,2000)}
   }
   // At-bat complete?
-  if(gs.abComplete&&S.atBatResolved!==gs.batterId){resolveAtBat(gs.abComplete,gs.abRbi||0)}
+  if(gs.abComplete&&S.atBatResolved!==gs.batterId){resolveAtBat(gs.abComplete,gs.abRbi||0);if(S.isHost&&roomRef){roomRef.child('gameState/abComplete').remove();roomRef.child('gameState/abRbi').remove()}}
 }
 
 // Shared: synced countdown then resolve
@@ -1544,6 +1544,10 @@ function processQueue(){
     const firstData=feedBuffer[feedBuffer.length-1].data;
     feedBuffer=[];// Clear buffer since we're applying latest
     applyDelayedFeed(firstData);
+    // Reset all pending pitch timestamps to NOW so the MIN_PREDICT_WINDOW starts
+    // from when the user actually sees the game state, not from when API was fetched
+    const resetTime=Date.now()/1000;
+    S.pendingPitches.forEach(p=>p.time=resetTime);
     return;// Don't process pitches on first load — just show the game state
   }
   // Apply delayed feed snapshots (scoreboard, matchup, bases, inning — everything visible)
@@ -2116,15 +2120,26 @@ $('pctlRewind').addEventListener('click',()=>{
   if(!practiceMode||practiceIdx<=1)return;
   // Go back 2 (since practiceIdx already advanced past current)
   practiceIdx=Math.max(0,practiceIdx-2);
-  // Reset state for replay
-  S.userPick='';resetPitchState();setPred(true);
-  clearZone();
-  // Replay from that point
+  // Full reset for replay
+  S.userPick='';S.cpuPick='';resetPitchState();setPred(true);
+  abReset();clearZone();
+  S.lastBatterId=0;// force matchup refresh
+  practiceWaiting=true;
+  // Show the pitch info without advancing
   const p=practicePitches[practiceIdx];
   if(p){
-    if(p.batterId)S.lastBatterId=0;// force matchup refresh
-    practiceNextPitch();
+    S.lastBatterId=p.batterId;
+    $('pitcherName').textContent=p.pitcherName||'\u2014';
+    $('batterName').textContent=p.batterName||'\u2014';
+    if(p.pitcherId)$('pitcherImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+p.pitcherId+'/headshot/67/current';
+    if(p.batterId)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+p.batterId+'/headshot/67/current';
+    const arrow=p.half==='top'?'\u25B2':'\u25BC';
+    $('inningBadge').textContent=arrow+' '+ordinal(p.inning);
+    renderCountDots(0,0,p.countOuts);
+    S.currentCount={balls:0,strikes:0};
+    $('statusBar').textContent='\u23EA Rewound \u2014 make your picks!';$('statusBar').className='status-bar';
   }
+  updatePctlInfo();
 });
 
 // End game button — finishes sim and shows summary
@@ -2400,10 +2415,11 @@ async function startPractice(isMP){
         if(p.batterId)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+p.batterId+'/headshot/67/current';
         const arrow=p.half==='top'?'\u25B2':'\u25BC';
         $('inningBadge').textContent=arrow+' '+ordinal(p.inning);
-        renderCountDots(p.countBalls,p.countStrikes,p.countOuts);
-        S.currentCount={balls:p.countBalls,strikes:p.countStrikes};
+        // Show 0-0 count for first pitch (the API count is AFTER this pitch — spoiler)
+        renderCountDots(0,0,p.countOuts);
+        S.currentCount={balls:0,strikes:0};
         S.currentOuts=p.countOuts;
-        updateDynamicOdds(p.countBalls,p.countStrikes);
+        updateDynamicOdds(0,0);
       }
       $('statusBar').textContent='\uD83C\uDFAF '+practicePitches.length+' pitches loaded \u2014 pick at-bat + pitch call!';$('statusBar').className='status-bar';
       // Start 20-second auto-skip for auto/fast modes
