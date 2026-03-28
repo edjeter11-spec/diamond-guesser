@@ -1271,8 +1271,17 @@ function mpApplyGameState(gs){
   if(gs.detState==='Final'||gs.detState==='Game Over'){
     if(S.gameActive){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}setTimeout(showEndGame,2000)}
   }
-  // At-bat complete?
-  if(gs.abComplete&&S.atBatResolved!==gs.batterId){resolveAtBat(gs.abComplete,gs.abRbi||0);if(S.isHost&&roomRef){roomRef.child('gameState/abComplete').remove();roomRef.child('gameState/abRbi').remove()}}
+  // At-bat complete? In MP, only resolve AFTER countdown is done (not during it).
+  // The countdown handler also checks isComplete, but sometimes the API updates
+  // isComplete on a later fetch after the pitch was already captured.
+  if(gs.abComplete&&S.atBatResolved!==gs.batterId){
+    if(!S.isMultiplayer||!mpCountdownActive){
+      // Solo mode: resolve immediately. MP: resolve only if countdown is done.
+      resolveAtBat(gs.abComplete,gs.abRbi||0);
+    }
+  }
+  // Host: clean up abComplete from Firebase after broadcasting
+  if(S.isHost&&roomRef&&gs.abComplete){roomRef.child('gameState/abComplete').remove();roomRef.child('gameState/abRbi').remove()}
 }
 
 // Shared: synced 3-2-1 countdown then resolve — runs on BOTH host and client
@@ -1909,7 +1918,8 @@ function renderSequence(){
   el.innerHTML=abSequence.map(s=>'<div class="pi-seq-dot '+s.cls+'">'+s.lbl+'</div>').join('');
 }
 function drawPitch(p){
-  if(p.pX===null||p.pZ===null)return;
+  // Skip if no pitch tracking data (null in solo, 0/0 in MP where Firebase strips nulls)
+  if(p.pX==null||p.pZ==null||(p.pX===0&&p.pZ===0))return;
   const zL=40,zR=145,zW=zR-zL;
   const svgX=zL+zW/2+(p.pX/2.5)*(zW/2);
   const zT=55,zB=195,zH=zB-zT;
