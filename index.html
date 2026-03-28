@@ -1211,14 +1211,18 @@ function mpApplyGameState(gs){
   if(gs.batterId)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+gs.batterId+'/headshot/67/current';
   // New batter?
   if(gs.batterId&&gs.batterId!==S.lastBatterId){
-    S.lastBatterId=gs.batterId;S.currentCount={balls:0,strikes:0};
+    S.lastBatterId=gs.batterId;S.currentCount={balls:0,strikes:0};S.currentOuts=gs.outs;
     abReset();clearZone();
+    // New batter always starts 0-0 — not a spoiler to show this
+    renderCountDots(0,0,gs.outs);
+    const cd=$('countDisplay');if(cd)cd.innerHTML='<span>0</span>-<span>0</span> \u2022 '+gs.outs+' out';
+    updateDynamicOdds(0,0);
+    setPred(true);resetPitchState();
     $('statusBar').textContent='\uD83C\uDFAF '+gs.batterName+' is up \u2014 make your call!';$('statusBar').className='status-bar';
+  }else{
+    // Same batter — DON'T update count dots (spoiler). Count updates in resolvePitch.
+    updateDynamicOdds(S.currentCount.balls,S.currentCount.strikes);
   }
-  // DON'T update count dots here — they spoil the pitch result
-  // Count updates happen inside resolvePitch after countdown/delay
-  // Only store for odds calculation (user already sees their prediction locked)
-  updateDynamicOdds(S.currentCount.balls,S.currentCount.strikes);
   const r1=gs.r1,r2=gs.r2,r3=gs.r3;let rCount=0;
   if(r1)rCount++;if(r2)rCount++;if(r3)rCount++;
   S.runnersOn=rCount;S.runnersOnSecond=r2;S.runnersOnThird=r3;
@@ -1415,7 +1419,9 @@ function applyDelayedFeed(d){
         abStartCountdown();
       }
       clearZone();renderCountDots(0,0,S.currentOuts);
+      const cd=$('countDisplay');if(cd)cd.innerHTML='<span>0</span>-<span>0</span> \u2022 '+S.currentOuts+' out';
       updateDynamicOdds(0,0);
+      setPred(true);resetPitchState();
       $('statusBar').textContent='\uD83C\uDFAF New batter \u2014 make your call!';$('statusBar').className='status-bar';
     }
   }
@@ -1514,17 +1520,24 @@ function renderBases(r1,r2,r3,off){
 /* ══════════════════════════════════════
    DELAY QUEUE
    ══════════════════════════════════════ */
+const MIN_PREDICT_WINDOW=8;// Minimum seconds to give user to make picks before resolving
 function processQueue(){
   if(!S.gameActive)return;const delay=parseInt($('delaySlider').value),now=Date.now()/1000;
+  // Effective delay = max(slider, minimum prediction window)
+  const effectiveDelay=Math.max(delay,MIN_PREDICT_WINDOW);
   // Apply delayed feed snapshots (scoreboard, matchup, bases, inning — everything visible)
+  // Feed snapshots use the raw delay (show matchup/inning updates sooner so user can predict)
   let lastReady=null;
   feedBuffer=feedBuffer.filter(f=>{
     if(now-f.time>=delay){lastReady=f.data;return false}
     return true;
   });
   if(lastReady)applyDelayedFeed(lastReady);
-  // Apply delayed pitches
-  S.pendingPitches=S.pendingPitches.filter(p=>{if(now-p.time>=delay){resolvePitch(p);return false}return true});
+  // Apply delayed pitches — uses effectiveDelay so user always has MIN_PREDICT_WINDOW seconds
+  S.pendingPitches=S.pendingPitches.filter(p=>{
+    if(now-p.time>=effectiveDelay){resolvePitch(p);return false}
+    return true;
+  });
 }
 /* ══════════════════════════════════════
    PITCH-BY-PITCH PREDICTIONS
@@ -2536,6 +2549,11 @@ function practiceNextPitch(){
     if(p.pitcherId)$('pitcherImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+p.pitcherId+'/headshot/67/current';
     if(p.batterId)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+p.batterId+'/headshot/67/current';
     clearZone();
+    // Reset count to 0-0 for new batter (not a spoiler)
+    S.currentCount={balls:0,strikes:0};
+    renderCountDots(0,0,p.countOuts);
+    const cd=$('countDisplay');if(cd)cd.innerHTML='<span>0</span>-<span>0</span> \u2022 '+p.countOuts+' out';
+    updateDynamicOdds(0,0);
     // Only reset at-bat if previous at-bat was resolved or no pick was made
     if(savedABState==='result'||!savedABPick){
       abReset();
