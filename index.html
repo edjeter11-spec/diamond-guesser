@@ -1113,6 +1113,28 @@ async function mpHostFetch(){
       if(off.first)gs.r1Name=off.first.fullName||'';
       if(off.second)gs.r2Name=off.second.fullName||'';
       if(off.third)gs.r3Name=off.third.fullName||'';
+      // Due-up batters for inning breaks
+      gs.dueUp=[];
+      if(off.batter)gs.dueUp.push({name:off.batter.fullName||'TBD',id:off.batter.id||0});
+      if(off.onDeck)gs.dueUp.push({name:off.onDeck.fullName||'TBD',id:off.onDeck.id||0});
+      if(off.inHole)gs.dueUp.push({name:off.inHole.fullName||'TBD',id:off.inHole.id||0});
+    }catch(e){}
+    // Game time
+    try{const dt=d.gameData.datetime;const fp=dt.firstPitch||dt.dateTime;if(fp){const t=new Date(fp);const h=t.getHours(),m=t.getMinutes();gs.gameTime='\u23F0 Started '+(h>12?h-12:h)+':'+String(m).padStart(2,'0')+(h>=12?' PM':' AM')}}catch(e){}
+    // Scoring plays summary
+    try{
+      const allPlays=d.liveData.plays.allPlays||[];const spIdx=d.liveData.plays.scoringPlays||[];
+      const scoring=spIdx.length?spIdx.map(i=>allPlays[i]).filter(Boolean):allPlays.filter(p2=>p2&&p2.about&&p2.about.isScoringPlay);
+      if(scoring.length){
+        const aAbr=d.gameData.teams.away.abbreviation||'AWY';const hAbr=d.gameData.teams.home.abbreviation||'HME';
+        gs.scoringPlays=scoring.map(p2=>({
+          inning:p2.about?ordinal(p2.about.inning):'',
+          desc:p2.result?p2.result.description:'',
+          awayScore:p2.result?p2.result.awayScore:0,
+          homeScore:p2.result?p2.result.homeScore:0,
+          aAbr,hAbr
+        }));
+      }
     }catch(e){}
 
     // Broadcast game state — first load is instant, then delayed to match TV
@@ -1241,6 +1263,63 @@ function mpApplyGameState(gs){
   S.runnersOn=rCount;S.runnersOnSecond=r2;S.runnersOnThird=r3;
   renderBases(r1,r2,r3,{first:r1?{fullName:gs.r1Name}:null,second:r2?{fullName:gs.r2Name}:null,third:r3?{fullName:gs.r3Name}:null});
   updateSitBadges();
+
+  // RBI toggle visibility
+  $('rbiRow').style.display=rCount>0?'flex':'none';
+  $('rbiRowAB').style.display=rCount>0&&!S.atBatPick?'flex':'none';
+
+  // Game time
+  if(gs.gameTime)$('gameTime').textContent=gs.gameTime;
+
+  // Game pause detection
+  const pauseStates=['Delayed','Suspended','Manager Challenge','Umpire Review','Challenge','Postponed'];
+  const isPaused=gs.detState&&pauseStates.some(ps=>gs.detState.includes(ps));
+  if(isPaused&&!S.gamePaused){S.gamePaused=true;setPred(false);$('statusBar').textContent='\u23F8\uFE0F '+gs.detState;$('statusBar').className='status-bar paused'}
+  else if(!isPaused&&S.gamePaused){S.gamePaused=false;setPred(true);$('statusBar').textContent='\uD83C\uDFAF Make your call!';$('statusBar').className='status-bar'}
+
+  // Inning break detection
+  const isBreak=gs.inningState==='Middle'||gs.inningState==='End';
+  if(isBreak&&gs.inning>0){
+    let breakLabel='';
+    if(gs.inningState==='Middle')breakLabel='\u23F8 Middle of the '+ordinal(gs.inning);
+    else breakLabel='\u23F8 End of the '+ordinal(gs.inning);
+    $('ibInning').textContent=breakLabel;
+    let battersHTML='';
+    const dueUp=gs.dueUp||[];
+    if(dueUp.length){
+      dueUp.forEach(b=>{
+        const img=b.id?'https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+b.id+'/headshot/67/current':'';
+        const lastName=(b.name||'TBD').split(' ').pop();
+        battersHTML+='<div class="ib-batter"><img src="'+img+'" onerror="this.style.display=\'none\'" alt=""><span>'+lastName+'</span></div>';
+      });
+    }else{battersHTML='<span style="color:var(--muted);font-size:11px">Waiting for lineup...</span>'}
+    $('ibBatters').innerHTML=battersHTML;
+    inInningBreak=true;
+    $('inningBreak').classList.add('show');$('matchupBar').style.display='none';
+    if(!pitchLocked)setPred(true);
+    if(dueUp.length&&dueUp[0].name&&!S.atBatPick){
+      $('atbatCard').classList.remove('locked');$('atbatLockedMsg').textContent='';
+      document.querySelectorAll('.ab-btn').forEach(b=>{b.disabled=false;b.classList.remove('sel')});
+      document.querySelector('.atbat-card-header span').textContent='\u26A1 Predict: '+dueUp[0].name+"'s At-Bat";
+    }
+    $('statusBar').textContent=breakLabel+' \u2014 predict the next at-bat now!';$('statusBar').className='status-bar paused';
+  }else{
+    inInningBreak=false;$('inningBreak').classList.remove('show');$('matchupBar').style.display='';
+    if(!S.atBatPick)document.querySelector('.atbat-card-header span').textContent='\uD83C\uDFAF Predict the At-Bat';
+  }
+
+  // Scoring summary
+  if(gs.scoringPlays&&gs.scoringPlays.length){
+    let html='';
+    gs.scoringPlays.forEach(sp=>{
+      html+='<div class="scoring-play"><span class="sp-inning">'+sp.inning+'</span><span class="sp-desc">'+sp.desc+'</span><span class="sp-score">'+sp.aAbr+' '+sp.awayScore+'-'+sp.homeScore+' '+sp.hAbr+'</span></div>';
+    });
+    $('scoringPlays').innerHTML=html;
+  }
+
+  // Halftime
+  if(gs.inning>=5&&!S.halfTimeShown)showHalftime(gs.inning,gs.half);
+
   // Game over?
   if(gs.detState==='Final'||gs.detState==='Game Over'){
     if(S.gameActive){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);if(S.userScore>0){saveLB();saveUserStats()}setTimeout(showEndGame,2000)}
