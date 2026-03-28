@@ -1176,6 +1176,11 @@ async function mpHostFetch(){
     // At-bat complete
     if(cp&&cp.about&&cp.about.isComplete&&cp.result&&cp.result.event){gs.abComplete=cp.result.event;gs.abRbi=cp.result.rbi||0}
 
+    // Detect batter change — reset pitch counter so new batter's pitch #1 isn't skipped
+    if(gs.batterId&&gs.batterId!==S.lastBatterId&&!mpCountdownActive&&!mpResultShowing){
+      mpLastPitchNum=0;
+    }
+
     // Broadcast game state to Firebase — BOTH host and client apply it
     roomRef.child('gameState').set(gs);
     mpApplyGameState(gs);
