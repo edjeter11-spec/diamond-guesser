@@ -2286,7 +2286,48 @@ async function startPractice(isMP){
       }
     }
 
-    console.log('Practice: loaded '+practicePitches.length+' pitches from '+allPlays.length+' at-bats');
+    console.log('Practice: loaded '+practicePitches.length+' pitches from '+allPlays.length+' at-bats for game '+gamePk);
+    if(practicePitches.length<50){
+      // Too few pitches for a full game experience — try another game
+      console.warn('Only '+practicePitches.length+' pitches found, trying another game...');
+      const alt=final.filter(g=>g.gamePk!==gamePk);
+      if(alt.length){
+        const g2=alt[Math.floor(Math.random()*alt.length)];
+        const r3=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+g2.gamePk+'/feed/live');
+        const gd2=await r3.json();
+        practiceGameData=gd2;practicePitches=[];
+        const ap2=gd2.liveData.plays.allPlays||[];
+        for(let p2=0;p2<ap2.length;p2++){
+          const play=ap2[p2];const events=play.playEvents||[];
+          const batter=play.matchup&&play.matchup.batter?play.matchup.batter:{};
+          const pitcher=play.matchup&&play.matchup.pitcher?play.matchup.pitcher:{};
+          const inning=play.about?play.about.inning:0;const half=play.about?play.about.halfInning:'';
+          const isComplete=play.about?play.about.isComplete:false;
+          const playResult=play.result?play.result.event:'';const playRbi=play.result?play.result.rbi||0:0;
+          let lastPitchIdx=-1;
+          for(let e=events.length-1;e>=0;e--){if(events[e].isPitch){lastPitchIdx=e;break}}
+          for(let e=0;e<events.length;e++){
+            const ev=events[e];if(!ev.isPitch)continue;
+            practicePitches.push({pitchNum:ev.pitchNumber,desc:ev.details?ev.details.description:'?',
+              callCode:ev.details&&ev.details.call?ev.details.call.code:'',
+              typeCode:ev.details&&ev.details.type?ev.details.type.code:'',
+              typeDesc:ev.details&&ev.details.type?ev.details.type.description:'',
+              pX:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pX:null,
+              pZ:ev.pitchData&&ev.pitchData.coordinates?ev.pitchData.coordinates.pZ:null,
+              szTop:ev.pitchData?ev.pitchData.strikeZoneTop||3.5:3.5,szBot:ev.pitchData?ev.pitchData.strikeZoneBottom||1.5:1.5,
+              speed:ev.pitchData?ev.pitchData.startSpeed:null,
+              count:ev.count?ev.count.balls+'-'+ev.count.strikes:'',
+              countBalls:ev.count?ev.count.balls:0,countStrikes:ev.count?ev.count.strikes:0,countOuts:ev.count?ev.count.outs:0,
+              playResult:playResult,playRbi:playRbi,
+              batterName:batter.fullName||'',batterId:batter.id||0,
+              pitcherName:pitcher.fullName||'',pitcherId:pitcher.id||0,
+              inning:inning,half:half,
+              isLastPitchOfAB:e===lastPitchIdx&&isComplete,abResult:isComplete?playResult:'',abRbi:playRbi});
+          }
+        }
+        console.log('Retry: loaded '+practicePitches.length+' pitches from game '+g2.gamePk);
+      }
+    }
     if(!practicePitches.length){btn.textContent='No pitch data found';return}
 
     // Start the practice game
@@ -2329,7 +2370,7 @@ async function startPractice(isMP){
         S.currentOuts=p.countOuts;
         updateDynamicOdds(p.countBalls,p.countStrikes);
       }
-      $('statusBar').textContent='\uD83C\uDFAF Pick at-bat outcome + pitch call to start!';$('statusBar').className='status-bar';
+      $('statusBar').textContent='\uD83C\uDFAF '+practicePitches.length+' pitches loaded \u2014 pick at-bat + pitch call!';$('statusBar').className='status-bar';
       // Start 20-second auto-skip for auto/fast modes
       if(practiceSpeed>0){
         autoPickCountdown=20;
@@ -2464,10 +2505,18 @@ function setupPracticeListener(){
 
 function practiceNextPitch(){
   if(!S.gameActive||!practiceMode||practiceIdx>=practicePitches.length){
-    if(practiceIdx>=practicePitches.length){
+    if(practiceIdx>=practicePitches.length&&S.gameActive){
       S.gameActive=false;if(S.userScore>0){saveLB();saveUserStats()}
       setTimeout(showEndGame,1500);
     }
+    return;
+  }
+  // HARD GUARD: if called from Next Pitch button, allow through.
+  // Otherwise, only proceed if both picks are locked (from practiceAutoCheck)
+  const hasPitch=!!S.userPick&&pitchLocked;
+  const hasAB=abState==='locked'||abState==='result';
+  if(!hasPitch&&!hasAB&&practiceWaiting){
+    // Neither pick made — don't advance, just wait
     return;
   }
   const p=practicePitches[practiceIdx];
