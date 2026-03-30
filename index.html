@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-title" content="Diamond Guesser">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0e1a">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230a0e1a'/><text y='68' x='50' text-anchor='middle' font-size='60'>%E2%9A%BE</text></svg>">
 <title>Diamond Guesser</title>
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -806,6 +808,18 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   </div>
 </div>
 
+<!-- RESUME GAME MODAL -->
+<div class="modal-overlay" id="resumeModal">
+  <div class="modal-box">
+    <h3>&#9918; Resume Game?</h3>
+    <p id="resumeMsg">You were in a room. Want to rejoin?</p>
+    <div class="modal-btns">
+      <button class="btn-friends" id="resumeYes">Rejoin Game</button>
+      <button class="modal-cancel" id="resumeNo">Start Fresh</button>
+    </div>
+  </div>
+</div>
+
 <!-- GAME MODE MODAL (from game card click) -->
 <div class="modal-overlay" id="modeModal">
   <div class="modal-box">
@@ -1036,8 +1050,8 @@ function ensureName(){
 function genCode(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let r='';for(let i=0;i<4;i++)r+=c[Math.floor(Math.random()*c.length)];return r}
 
 // Save/clear room session for reload persistence
-function saveRoomSession(){sessionStorage.setItem('dg_room',JSON.stringify({code:S.roomCode,isHost:S.isHost}))}
-function clearRoomSession(){sessionStorage.removeItem('dg_room')}
+function saveRoomSession(){localStorage.setItem('dg_room',JSON.stringify({code:S.roomCode,isHost:S.isHost,name:S.playerName,pid:S.playerId,ts:Date.now()}))}
+function clearRoomSession(){localStorage.removeItem('dg_room')}
 
 // Setup presence heartbeat — keeps player alive through refreshes
 function setupPresence(){
@@ -1182,27 +1196,59 @@ $('joinRoomBtn').addEventListener('click',async()=>{
 
 // Auto-rejoin room after page reload
 async function tryRejoinRoom(){
-  const saved=sessionStorage.getItem('dg_room');
+  const saved=localStorage.getItem('dg_room');
   if(!saved)return false;
   try{
     const{code,isHost}=JSON.parse(saved);
+    // Check if room still exists in Firebase
     const ref=db.ref('rooms/'+code);
     const snap=await ref.once('value');
     if(!snap.exists()){clearRoomSession();return false}
-    // Room still exists — rejoin it
-    const pData=snap.child('players/'+S.playerId).val();
-    if(pData){
-      // We're still in the room, just reconnect listeners
-      ref.child('players/'+S.playerId).update({online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP});
-    }else{
-      // We were removed — re-add ourselves
-      ref.child('players/'+S.playerId).set({name:S.playerName,score:pData?pData.score||0:0,streak:pData?pData.streak||0:0,isHost:isHost,online:true});
-    }
-    joinRoom(code,isHost,true);
-    $('roomStatus').textContent=isHost?'Reconnected as host!':'Reconnected!';
-    if(isHost)loadGames($('roomGamesList')).then(()=>renderGameList($('roomGamesList'),cachedGames,true));
-    showScreen('screenLobby');
-    return true;
+
+    // Room exists — show resume modal
+    const roomData=snap.val();
+    const playerCount=roomData.players?Object.keys(roomData.players).length:0;
+    const hasGame=!!roomData.game;
+    $('resumeMsg').textContent=hasGame
+      ?'You were playing with '+playerCount+' player'+(playerCount>1?'s':'')+' (Room: '+code+'). Rejoin?'
+      :'You were in room '+code+' with '+playerCount+' player'+(playerCount>1?'s':'')+'. Rejoin?';
+    $('resumeModal').classList.add('show');
+
+    return new Promise((resolve)=>{
+      const doRejoin=async()=>{
+        $('resumeModal').classList.remove('show');
+        // Reconnect to the room
+        const pData=snap.child('players/'+S.playerId).val();
+        if(pData){
+          ref.child('players/'+S.playerId).update({online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP});
+        }else{
+          ref.child('players/'+S.playerId).set({name:S.playerName,score:pData?pData.score||0:0,streak:pData?pData.streak||0:0,isHost:isHost,online:true,joinedAt:Date.now()});
+        }
+        roomPlayerCount=roomData.playerCount||2;
+        joinRoom(code,isHost,true);
+        $('roomStatus').textContent=isHost?'Reconnected as host!':'Reconnected!';
+        if(isHost)loadGames($('roomGamesList')).then(()=>renderGameList($('roomGamesList'),cachedGames,true));
+        renderSlotGrid();updateRoomStartBtn();
+        showScreen('screenLobby');
+        // If a game was in progress, auto-start it
+        if(hasGame){
+          const g=roomData.game;
+          setTimeout(()=>{
+            if(g.gameId&&!S.gameActive)startGame(g.gameId,g.away,g.home,g.awayId,g.homeId);
+          },500);
+        }
+        resolve(true);
+      };
+      const doFresh=()=>{
+        $('resumeModal').classList.remove('show');
+        clearRoomSession();
+        // Remove ourselves from the old room
+        ref.child('players/'+S.playerId).remove();
+        resolve(false);
+      };
+      $('resumeYes').onclick=doRejoin;
+      $('resumeNo').onclick=doFresh;
+    });
   }catch(e){clearRoomSession();return false}
 }
 
@@ -3504,6 +3550,9 @@ document.addEventListener('visibilitychange',()=>{
 });
 window.addEventListener('beforeunload',()=>{if(S.userScore>0){saveLB();saveUserStats()}});
 // Auth handles initial screen — don't show home until logged in
+
+// ── PWA: Register service worker for home screen install ──
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 </script>
 
 <!-- Impact Flash -->
