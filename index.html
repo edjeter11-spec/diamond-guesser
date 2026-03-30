@@ -1363,15 +1363,17 @@ function renderMPScores(){
     const p1Me=p1.id===S.playerId,p2Me=p2.id===S.playerId;
     $('spot1').className='mp-spot-card'+(p1.score>p2.score?' lead':'')+(p1Me?' is-me':'');
     $('spot2').className='mp-spot-card'+(p2.score>p1.score?' lead':'')+(p2Me?' is-me':'');
-    $('spot1Name').textContent=p1.name+(p1Me?' (You)':'');
-    $('spot2Name').textContent=p2.name+(p2Me?' (You)':'');
+    const p1Off=p1.online===false,p2Off=p2.online===false;
+    $('spot1Name').textContent=p1.name+(p1Me?' (You)':'')+(p1Off?' [Away]':'');
+    $('spot2Name').textContent=p2.name+(p2Me?' (You)':'')+(p2Off?' [Away]':'');
     $('spot1Score').textContent=p1.score||0;
     $('spot2Score').textContent=p2.score||0;
-    $('spot1Ready').textContent=p1.ready?'\u2705':'';
-    $('spot2Ready').textContent=p2.ready?'\u2705':'';
-    // Stat lines
-    const s1Streak=(p1.streak||0)>=2?'\uD83D\uDD25 '+p1.streak+' streak':'';
-    const s2Streak=(p2.streak||0)>=2?'\uD83D\uDD25 '+p2.streak+' streak':'';
+    $('spot1Ready').textContent=p1Off?'\u23F8':(p1.ready?'\u2705':'');
+    $('spot2Ready').textContent=p2Off?'\u23F8':(p2.ready?'\u2705':'');
+    if(p1Off)$('spot1').style.opacity='0.5';else $('spot1').style.opacity='';
+    if(p2Off)$('spot2').style.opacity='0.5';else $('spot2').style.opacity='';
+    const s1Streak=p1Off?'\u23F8 Paused':((p1.streak||0)>=2?'\uD83D\uDD25 '+p1.streak+' streak':'');
+    const s2Streak=p2Off?'\u23F8 Paused':((p2.streak||0)>=2?'\uD83D\uDD25 '+p2.streak+' streak':'');
     $('spot1Stat').textContent=s1Streak;
     $('spot2Stat').textContent=s2Streak;
   }else{spotlight.classList.remove('show')}
@@ -1384,14 +1386,16 @@ function renderMPScores(){
     $('mpDugoutList').innerHTML=rest.map((p,i)=>{
       const isMe=p.id===S.playerId;
       const isHot=hotSeat&&p.id===hotSeat.id;
+      const isOff=p.online===false;
       const rally=hasRally(p.id)?'<span style="font-size:9px;background:#166534;color:#4ade80;padding:1px 4px;border-radius:3px;margin-left:3px;font-weight:700">RALLY</span>':'';
-      const streak=(p.streak||0)>=2?'\uD83D\uDD25'.repeat(Math.min(p.streak,3)):'';
-      return`<div class="mp-dugout-row${isHot?' hot-seat':''}"${isMe?' style="color:var(--accent2)"':''}>
+      const streak=isOff?'':((p.streak||0)>=2?'\uD83D\uDD25'.repeat(Math.min(p.streak,3)):'');
+      const pausedTag=isOff?'<span style="font-size:9px;background:#334155;color:var(--muted);padding:1px 4px;border-radius:3px;margin-left:3px;font-weight:700">AWAY</span>':'';
+      return`<div class="mp-dugout-row${isHot?' hot-seat':''}"${isMe?' style="color:var(--accent2)"':''}${isOff?' style="opacity:0.5"':''}>
         <span class="dg-rank">${isHot?'\uD83D\uDD25':(i+3)+'.'}</span>
-        <span class="dg-name">${p.name}${isMe?' (You)':''}${isHot?'<span class="mp-hot-seat-badge">HOT SEAT</span>':''}${rally}</span>
+        <span class="dg-name">${p.name}${isMe?' (You)':''}${isHot?'<span class="mp-hot-seat-badge">HOT SEAT</span>':''}${pausedTag}${rally}</span>
         <span style="font-size:10px">${streak}</span>
         <span class="dg-score">${p.score||0}</span>
-        <span class="dg-ready">${p.ready?'\u2705':''}</span>
+        <span class="dg-ready">${isOff?'\u23F8':(p.ready?'\u2705':'')}</span>
       </div>`;
     }).join('');
   }else{dugout.classList.remove('show')}
@@ -1410,17 +1414,19 @@ function renderMPScores(){
     $('mpScoresList').innerHTML=sorted.map((p,i)=>{
       const isMe=p.id===S.playerId;
       const isLast=hotSeat&&p.id===hotSeat.id;
+      const isOff=p.online===false;
       const rank=isLast?'rank-last':(rankClasses[i]||'');
       const medal=isLast?'\uD83D\uDD25':(medals[i]||'');
-      const streak=(p.streak||0)>=2?(' '+'\uD83D\uDD25'.repeat(Math.min(p.streak,5))):'';
+      const streak=isOff?'':((p.streak||0)>=2?(' '+'\uD83D\uDD25'.repeat(Math.min(p.streak,5))):'');
       let pickTag='';
-      if(p.ready){pickTag=`<span style="font-size:9px;color:#4ade80;margin-left:3px">\u2705</span>`}
+      if(isOff){pickTag=`<span style="font-size:9px;color:var(--muted);margin-left:3px">\u23F8 Away</span>`}
+      else if(p.ready){pickTag=`<span style="font-size:9px;color:#4ade80;margin-left:3px">\u2705</span>`}
       else if(p.lastPick){
         const icon=p.lastGot===true?'\u2705':p.lastGot===false?'\u274C':'';
         pickTag=`<span style="font-size:9px;color:${p.lastGot?'#4ade80':'#f87171'};margin-left:3px">${icon}</span>`;
       }
       const hotBadge=isLast?'<span class="mp-hot-seat-badge">HOT SEAT \uD83D\uDD25</span>':'';
-      return`<div class="mp-podium-row ${rank}${isMe?' is-me':''}">
+      return`<div class="mp-podium-row ${rank}${isMe?' is-me':''}"${isOff?' style="opacity:0.5"':''}>
         <span class="mp-medal">${medal}</span>
         <span class="mp-podium-name">${p.name}${hotBadge}${pickTag}</span>
         <span class="mp-podium-streak">${streak}</span>
@@ -1514,21 +1520,24 @@ function mpHostStart(){
     S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
     if(mpPendingPitch&&S.gameActive&&!mpCountdownActive&&mpState!=='COUNTDOWN'){
       const playerArr=Object.values(S.mpPlayers);
-      const total=playerArr.length;
-      const readyCount=playerArr.filter(p=>p.ready===true).length;
+      // Only wait for ONLINE players — offline players' points are paused
+      const onlinePlayers=playerArr.filter(p=>p.online!==false);
+      const total=onlinePlayers.length;
+      const readyCount=onlinePlayers.filter(p=>p.ready===true).length;
 
-      // Play pop for each new ready (others hear it via their own lock-in)
-      // Show progress on status bar
       if(readyCount>0&&readyCount<total){
         $('statusBar').textContent='\u2705 '+readyCount+'/'+total+' players ready...';
       }
 
-      if(total>0&&readyCount>=total){
-        // ALL players ready — handshake complete, broadcast countdown
+      // Need at least 2 online players to continue, and all online must be ready
+      if(total>=2&&readyCount>=total){
         roomRef.child('hotSeatPick').remove();
         const safePitch=JSON.parse(JSON.stringify(mpPendingPitch,(k,v)=>v===null?0:v));
         roomRef.child('countdown').set({t:Date.now(),p:safePitch});
         mpPendingPitch=null;
+      }else if(total<2&&playerArr.length>=2){
+        // Only 1 online player left — show waiting message
+        $('statusBar').textContent='\u23F8 Waiting for another player to come back...';$('statusBar').className='status-bar paused';
       }
     }
   });
@@ -1633,8 +1642,8 @@ async function mpHostFetch(){
             countBalls:ev.count?ev.count.balls:0,countStrikes:ev.count?ev.count.strikes:0,countOuts:ev.count?ev.count.outs:0,
             playResult:pr,playRbi:rbi,
             isComplete:cp.about&&cp.about.isComplete,abResult:cp.about&&cp.about.isComplete?pr:'',abRbi:rbi};
-          // Reset everyone's ready, clear hot seat, and notify
-          Object.keys(S.mpPlayers).forEach(pid=>{roomRef.child('players/'+pid+'/ready').set(false)});
+          // Reset ONLINE players' ready, clear hot seat, and notify
+          Object.entries(S.mpPlayers).forEach(([pid,p])=>{if(p.online!==false)roomRef.child('players/'+pid+'/ready').set(false)});
           roomRef.child('hotSeatPick').remove();
           roomRef.child('pendingPitch').set({n:pn,t:Date.now()});
           setPred(true);resetPitchState();
@@ -3179,8 +3188,8 @@ function mpPracticeStart(){
   roomRef.child('players').on('value',snap=>{
     S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
     if(mpPendingPitch&&S.gameActive){
-      const players=Object.values(S.mpPlayers);
-      const allReady=players.length>0&&players.every(p=>p.ready===true);
+      const onlinePlayers=Object.values(S.mpPlayers).filter(p=>p.online!==false);
+      const allReady=onlinePlayers.length>=2&&onlinePlayers.every(p=>p.ready===true);
       if(allReady){
         // All ready — trigger synced countdown with the practice pitch
         roomRef.child('countdown').set({start:Date.now(),pitch:mpPendingPitch});
