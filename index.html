@@ -237,6 +237,26 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .mp-sync-bar{display:none;background:linear-gradient(135deg,#1e3a5f,#0f3460);border-radius:var(--radius);padding:8px 12px;text-align:center;font-size:12px;font-weight:700;color:var(--blue);animation:readyPulse 1s ease-in-out infinite}
 .mp-sync-bar.show{display:block}
 
+/* ── Floating Chat ── */
+.mp-chat-toggle{position:fixed;bottom:calc(12px + var(--safe-bot));right:12px;z-index:180;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:20px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(59,130,246,0.4);display:none;align-items:center;justify-content:center;transition:transform .15s}
+.mp-chat-toggle.show{display:flex}
+.mp-chat-toggle:active{transform:scale(0.9)}
+.mp-chat-badge{position:absolute;top:-2px;right:-2px;min-width:16px;height:16px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:800;display:none;align-items:center;justify-content:center;padding:0 4px}
+.mp-chat-badge.show{display:flex}
+.mp-chat-panel{position:fixed;bottom:calc(64px + var(--safe-bot));right:12px;width:280px;max-height:320px;z-index:180;background:var(--card);border:1px solid #334155;border-radius:var(--radius);display:none;flex-direction:column;box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden}
+.mp-chat-panel.show{display:flex}
+.mp-chat-header{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--card2);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px}
+.mp-chat-header button{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer}
+.mp-chat-msgs{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px;max-height:200px}
+.mp-chat-msg{font-size:11px;line-height:1.4;padding:4px 6px;border-radius:6px;background:var(--card2);word-wrap:break-word}
+.mp-chat-msg .cm-name{font-weight:700;color:var(--accent);margin-right:4px}
+.mp-chat-msg.me{background:rgba(16,185,129,0.15)}
+.mp-chat-msg.system{background:transparent;color:var(--muted);font-style:italic;text-align:center;font-size:10px}
+.mp-chat-input-row{display:flex;gap:4px;padding:6px 8px;border-top:1px solid #334155}
+.mp-chat-input{flex:1;background:var(--card2);border:1px solid #334155;border-radius:8px;padding:6px 8px;color:var(--text);font-size:12px;outline:none}
+.mp-chat-input:focus{border-color:var(--blue)}
+.mp-chat-send{border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;background:var(--blue);color:#fff}
+
 /* ── Double Down wager button ── */
 .mp-wager{display:none;background:linear-gradient(135deg,#78350f,#92400e);border-radius:var(--radius);padding:8px 12px;text-align:center;margin:2px 0;border:1px solid rgba(245,158,11,0.3)}
 .mp-wager.show{display:block}
@@ -538,10 +558,14 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     <!-- Player count selector (host only) -->
     <div id="playerCountPicker" style="display:none">
       <div style="text-align:center;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px">Players</div>
-      <div class="player-count-row">
+      <div class="player-count-row" style="flex-wrap:wrap">
         <button class="pc-btn sel" data-pc="2">2</button>
         <button class="pc-btn" data-pc="3">3</button>
         <button class="pc-btn" data-pc="4">4</button>
+        <button class="pc-btn" data-pc="5">5</button>
+        <button class="pc-btn" data-pc="6">6</button>
+        <button class="pc-btn" data-pc="8">8</button>
+        <button class="pc-btn" data-pc="10">10</button>
       </div>
     </div>
     <!-- Waiting room slots -->
@@ -1093,6 +1117,8 @@ function joinRoom(code,isHost,isRejoin){
   roomRef.child('game').on('value',snap=>{
     const g=snap.val();if(g&&g.gameId&&!S.gameActive)startGame(g.gameId,g.away,g.home,g.awayId,g.homeId);
   });
+  // Show chat in lobby + game
+  showChatButton();
   // Listen for hot seat pick reveal
   roomRef.child('hotSeatPick').on('value',snap=>{
     const hs=snap.val();
@@ -1276,9 +1302,9 @@ function mpSendScore(pick,got){
   roomRef.child('players/'+S.playerId).update(upd);
 }
 function mpDisconnect(intentional){
+  hideChatButton();
   if(roomRef){
     if(intentional){
-      // User explicitly left — remove from Firebase
       if(S.isHost)roomRef.remove();
       else roomRef.child('players/'+S.playerId).remove();
     }
@@ -1482,12 +1508,12 @@ function startGame(gameId,away,home,awayId,homeId){
     document.querySelector('.delay-bar').style.display='none';
     mpSendScore();mpState='WAITING';mpHostPitchNum=0;mpRallyStreaks={};
     $('mpSyncBar').classList.remove('show');
-    collapseLeagueInMP();startSpotRotation();
+    collapseLeagueInMP();startSpotRotation();showChatButton();
   }else{
     $('soloScores').style.display='';$('mpScores').style.display='none';
     $('mpSpotlight').classList.remove('show');$('mpDugout').classList.remove('show');
     document.querySelector('.delay-bar').style.display='';
-    stopSpotRotation();
+    stopSpotRotation();hideChatButton();
   }
 
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');startTicker();renderGameLB();
@@ -3522,6 +3548,50 @@ function startSpotRotation(){
 function stopSpotRotation(){if(spotRotateTimer){clearInterval(spotRotateTimer);spotRotateTimer=null}}
 
 /* ══════════════════════════════════════
+   FLOATING CHAT
+   ══════════════════════════════════════ */
+let chatOpen=false;let chatUnread=0;let chatListenerActive=false;
+
+function toggleChat(){
+  chatOpen=!chatOpen;
+  $('chatPanel').classList.toggle('show',chatOpen);
+  if(chatOpen){chatUnread=0;$('chatBadge').classList.remove('show');$('chatBadge').textContent='0';
+    const msgs=$('chatMsgs');msgs.scrollTop=msgs.scrollHeight;$('chatInput').focus()}
+}
+function sendChat(){
+  const input=$('chatInput');
+  const text=input.value.trim();
+  if(!text||!roomRef)return;
+  input.value='';
+  roomRef.child('chat').push({name:S.playerName,pid:S.playerId,text:text,t:firebase.database.ServerValue.TIMESTAMP});
+}
+function setupChatListener(){
+  if(chatListenerActive||!roomRef)return;
+  chatListenerActive=true;
+  // Only listen for NEW messages (after now)
+  const startTime=Date.now();
+  roomRef.child('chat').orderByChild('t').startAt(startTime).on('child_added',snap=>{
+    const msg=snap.val();if(!msg)return;
+    const isMe=msg.pid===S.playerId;
+    const el=document.createElement('div');
+    el.className='mp-chat-msg'+(isMe?' me':'');
+    el.innerHTML=`<span class="cm-name">${msg.name}:</span>${escapeHtml(msg.text)}`;
+    $('chatMsgs').appendChild(el);
+    $('chatMsgs').scrollTop=$('chatMsgs').scrollHeight;
+    // Unread badge
+    if(!chatOpen&&!isMe){chatUnread++;$('chatBadge').textContent=chatUnread;$('chatBadge').classList.add('show');playPop()}
+  });
+}
+function showChatButton(){$('chatToggle').classList.add('show');setupChatListener()}
+function hideChatButton(){$('chatToggle').classList.remove('show');$('chatPanel').classList.remove('show');chatOpen=false;chatListenerActive=false}
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+// Enter key to send
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&document.activeElement===$('chatInput')){e.preventDefault();sendChat()}
+});
+
+/* ══════════════════════════════════════
    LEAGUE SCORES COLLAPSE IN MP
    ══════════════════════════════════════ */
 function collapseLeagueInMP(){
@@ -3563,6 +3633,17 @@ window.addEventListener('beforeunload',()=>{if(S.userScore>0){saveLB();saveUserS
 // ── PWA: Register service worker for home screen install ──
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 </script>
+
+<!-- Floating Chat -->
+<button class="mp-chat-toggle" id="chatToggle" onclick="toggleChat()">&#128172;<span class="mp-chat-badge" id="chatBadge">0</span></button>
+<div class="mp-chat-panel" id="chatPanel">
+  <div class="mp-chat-header"><span>&#128172; Chat</span><button onclick="toggleChat()">&times;</button></div>
+  <div class="mp-chat-msgs" id="chatMsgs"></div>
+  <div class="mp-chat-input-row">
+    <input class="mp-chat-input" id="chatInput" placeholder="Type a message..." maxlength="200" autocomplete="off">
+    <button class="mp-chat-send" id="chatSend" onclick="sendChat()">Send</button>
+  </div>
+</div>
 
 <!-- Impact Flash -->
 <div class="impact-flash" id="impactFlash"></div>
