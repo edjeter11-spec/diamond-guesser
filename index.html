@@ -198,6 +198,43 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .room-early-start{font-size:10px;color:var(--muted);text-align:center;padding:4px 0;display:none}
 .room-early-start.show{display:block}
 
+/* ── Pitch Countdown Overlay ── */
+.pitch-overlay{display:none;position:fixed;inset:0;background:rgba(10,14,26,0.92);z-index:250;justify-content:center;align-items:center;flex-direction:column;gap:12px}
+.pitch-overlay.show{display:flex}
+.pitch-overlay .po-count{font-size:96px;font-weight:900;color:var(--accent);text-shadow:0 0 40px rgba(245,158,11,0.6);animation:poScale .7s ease-in-out infinite alternate;line-height:1}
+@keyframes poScale{0%{transform:scale(0.85);opacity:0.7}100%{transform:scale(1.1);opacity:1}}
+.pitch-overlay .po-label{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;font-weight:700}
+.pitch-overlay .po-pitch{font-size:48px;font-weight:900;color:#4ade80;text-shadow:0 0 30px rgba(74,222,128,0.5);animation:poPitchPop .4s ease-out}
+@keyframes poPitchPop{0%{transform:scale(0.5);opacity:0}100%{transform:scale(1);opacity:1}}
+
+/* ── Top 2 Spotlight (MP header) ── */
+.mp-spotlight{display:none;gap:6px;align-items:stretch;margin:2px 0}
+.mp-spotlight.show{display:flex}
+.mp-spot-card{flex:1;background:var(--card);border-radius:var(--radius);padding:8px;text-align:center;position:relative;transition:all .4s}
+.mp-spot-card.lead{border:2px solid var(--accent);background:linear-gradient(135deg,#78350f,#92400e)}
+.mp-spot-card .spot-rank{font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:1px}
+.mp-spot-card .spot-name{font-size:13px;font-weight:800;margin:2px 0}
+.mp-spot-card .spot-score{font-size:28px;font-weight:900;color:var(--accent)}
+.mp-spot-card .spot-ready{position:absolute;top:4px;right:6px;font-size:14px}
+.mp-spot-vs{display:flex;align-items:center;font-size:10px;color:var(--muted);font-weight:800;padding:0 2px}
+
+/* ── Dugout (3rd/4th place) ── */
+.mp-dugout{display:none;background:var(--card);border-radius:var(--radius);padding:6px 10px;margin:2px 0}
+.mp-dugout.show{display:block}
+.mp-dugout-header{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:4px;text-align:center}
+.mp-dugout-row{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;border-bottom:1px solid rgba(255,255,255,0.04)}
+.mp-dugout-row:last-child{border:none}
+.mp-dugout-row .dg-rank{min-width:20px;text-align:center}
+.mp-dugout-row .dg-name{flex:1;font-weight:600}
+.mp-dugout-row .dg-score{font-weight:800;color:var(--accent);min-width:36px;text-align:right}
+.mp-dugout-row .dg-ready{font-size:12px;min-width:16px;text-align:center}
+.mp-dugout-row.hot-seat{color:#fca5a5}
+.mp-dugout-row.hot-seat .dg-score{color:#fca5a5}
+
+/* ── Syncing indicator ── */
+.mp-sync-bar{display:none;background:linear-gradient(135deg,#1e3a5f,#0f3460);border-radius:var(--radius);padding:8px 12px;text-align:center;font-size:12px;font-weight:700;color:var(--blue);animation:readyPulse 1s ease-in-out infinite}
+.mp-sync-bar.show{display:block}
+
 .halftime-alert{display:none;background:linear-gradient(135deg,#78350f,#92400e);border-radius:var(--radius);padding:12px;text-align:center;animation:pulse 2s ease-in-out infinite}
 .halftime-alert.show{display:block}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.85}}
@@ -527,6 +564,16 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     <div class="score-card cpu"><div class="sc-ready" id="cpuReady">⏳</div><div class="sc-label">CPU</div><div class="sc-val" id="cpuScore">0</div></div>
   </div>
   <div class="waiting-msg" id="waitingMsg" style="display:none;text-align:center;font-size:12px;color:var(--muted);padding:2px 0"></div>
+  <!-- MP Top 2 Spotlight -->
+  <div class="mp-spotlight" id="mpSpotlight">
+    <div class="mp-spot-card" id="spot1"><div class="spot-rank">1st Place</div><div class="spot-name" id="spot1Name">---</div><div class="spot-score" id="spot1Score">0</div><div class="spot-ready" id="spot1Ready"></div></div>
+    <div class="mp-spot-vs">VS</div>
+    <div class="mp-spot-card" id="spot2"><div class="spot-rank">2nd Place</div><div class="spot-name" id="spot2Name">---</div><div class="spot-score" id="spot2Score">0</div><div class="spot-ready" id="spot2Ready"></div></div>
+  </div>
+  <!-- MP Dugout (3rd/4th place) -->
+  <div class="mp-dugout" id="mpDugout"><div class="mp-dugout-header">&#9917; Dugout</div><div id="mpDugoutList"></div></div>
+  <!-- Syncing indicator -->
+  <div class="mp-sync-bar" id="mpSyncBar">&#8635; Syncing with host...</div>
   <!-- Multiplayer scores -->
   <div class="mp-scores" id="mpScores" style="display:none">
     <h4>Leaderboard</h4>
@@ -1135,6 +1182,9 @@ function mpCheckReady(){
   const abReady=abState==='locked'||abState==='result';
   if(pitchReady&&abReady){
     roomRef.child('players/'+S.playerId+'/ready').set(true);
+    // Play pop sound + haptic on lock-in
+    playPop();
+    if(navigator.vibrate)navigator.vibrate(30);
     // Hot seat: if I'm the hot seat player and 3+ people, broadcast my pitch pick
     const hotSeat=getHotSeatPlayer();
     if(hotSeat&&hotSeat.id===S.playerId&&Object.keys(S.mpPlayers).length>=3){
@@ -1163,12 +1213,15 @@ function mpDisconnect(intentional){
 }
 function renderRoomPlayers(){
   const el=$('rpList');const players=S.mpPlayers;
-  el.innerHTML=Object.entries(players).map(([id,p])=>{
+  // Sort by joinedAt for consistent indexing
+  const sorted=Object.entries(players).sort((a,b)=>(a[1].joinedAt||0)-(b[1].joinedAt||0));
+  el.innerHTML=sorted.map(([id,p],idx)=>{
     const isMe=id===S.playerId;
+    const playerNum='P'+(idx+1);
     if(isMe){
-      return`<div class="rp-item"><span class="rp-name" id="myRoomName" style="cursor:pointer;border-bottom:1px dashed #475569" title="Tap to edit">${p.name}</span><span class="rp-badge">YOU</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}<span style="font-size:9px;color:var(--muted);margin-left:auto">&#9998;</span></div>`;
+      return`<div class="rp-item"><span style="font-size:10px;color:var(--blue);font-weight:700;min-width:24px">${playerNum}</span><span class="rp-name" id="myRoomName" style="cursor:pointer;border-bottom:1px dashed #475569" title="Tap to edit">${p.name}</span><span class="rp-badge">YOU</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}<span style="font-size:9px;color:var(--muted);margin-left:auto">&#9998;</span></div>`;
     }
-    return`<div class="rp-item"><span class="rp-name">${p.name}</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}</div>`;
+    return`<div class="rp-item"><span style="font-size:10px;color:var(--blue);font-weight:700;min-width:24px">${playerNum}</span><span class="rp-name">${p.name}</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}<span style="font-size:9px;color:${p.online?'#4ade80':'var(--muted)'};margin-left:auto">${p.online?'\u25CF':'\u25CB'}</span></div>`;
   }).join('');
   // Make own name editable
   const myName=$('myRoomName');
@@ -1193,28 +1246,85 @@ function renderRoomPlayers(){
   }
 }
 function getHotSeatPlayer(){
-  // Last place = hot seat. Tie: player who joined latest
   const players=Object.entries(S.mpPlayers).map(([id,p])=>({...p,id}));
-  if(players.length<3)return null; // Hot seat only for 3+ players
+  if(players.length<3)return null;
   players.sort((a,b)=>(a.score||0)-(b.score||0)||(b.joinedAt||0)-(a.joinedAt||0));
-  return players[0];// Lowest score
+  return players[0];
 }
+
+// Track rally streaks per player (3 correct pitch calls = rally badge)
+let mpRallyStreaks={};
+function checkRallyBadge(playerId,got){
+  if(!mpRallyStreaks[playerId])mpRallyStreaks[playerId]=0;
+  if(got)mpRallyStreaks[playerId]++;
+  else mpRallyStreaks[playerId]=0;
+  if(mpRallyStreaks[playerId]>=3){
+    // Check if this player is in 3rd+ place (dugout)
+    const sorted=Object.entries(S.mpPlayers).map(([id,p])=>({...p,id})).sort((a,b)=>(b.score||0)-(a.score||0));
+    const idx=sorted.findIndex(p=>p.id===playerId);
+    if(idx>=2){playRally();return true}
+  }
+  return false;
+}
+
+// Count how many ready
+function mpReadyCount(){
+  return Object.values(S.mpPlayers).filter(p=>p.ready===true).length;
+}
+
 function renderMPScores(){
   if(!S.isMultiplayer)return;
   const sorted=Object.entries(S.mpPlayers).map(([id,p])=>({...p,id})).sort((a,b)=>(b.score||0)-(a.score||0));
   const playerCount=sorted.length;
   const hotSeat=getHotSeatPlayer();
-  const medals=['\uD83E\uDD47','\uD83E\uDD48','\uD83E\uDD49',''];
-  const rankClasses=['rank-1','rank-2','rank-3',''];
 
-  // Show hot seat banner if 3+ players
+  // ── Top 2 Spotlight ──
+  const spotlight=$('mpSpotlight');
+  const dugout=$('mpDugout');
+  if(playerCount>=2){
+    spotlight.classList.add('show');
+    const p1=sorted[0],p2=sorted[1];
+    const p1Me=p1.id===S.playerId,p2Me=p2.id===S.playerId;
+    $('spot1').className='mp-spot-card'+(p1.score>p2.score?' lead':'')+(p1Me?' is-me':'');
+    $('spot2').className='mp-spot-card'+(p2.score>p1.score?' lead':'')+(p2Me?' is-me':'');
+    $('spot1Name').textContent=p1.name+(p1Me?' (You)':'');
+    $('spot2Name').textContent=p2.name+(p2Me?' (You)':'');
+    $('spot1Score').textContent=p1.score||0;
+    $('spot2Score').textContent=p2.score||0;
+    $('spot1Ready').textContent=p1.ready?'\u2705':'';
+    $('spot2Ready').textContent=p2.ready?'\u2705':'';
+  }else{spotlight.classList.remove('show')}
+
+  // ── Dugout (3rd/4th place) ──
+  if(playerCount>=3){
+    dugout.classList.add('show');
+    const rest=sorted.slice(2);
+    const hasRally=(id)=>mpRallyStreaks[id]>=3;
+    $('mpDugoutList').innerHTML=rest.map((p,i)=>{
+      const isMe=p.id===S.playerId;
+      const isHot=hotSeat&&p.id===hotSeat.id;
+      const rally=hasRally(p.id)?'<span style="font-size:9px;background:#166534;color:#4ade80;padding:1px 4px;border-radius:3px;margin-left:3px;font-weight:700">RALLY</span>':'';
+      const streak=(p.streak||0)>=2?'\uD83D\uDD25'.repeat(Math.min(p.streak,3)):'';
+      return`<div class="mp-dugout-row${isHot?' hot-seat':''}"${isMe?' style="color:var(--accent2)"':''}>
+        <span class="dg-rank">${isHot?'\uD83D\uDD25':(i+3)+'.'}</span>
+        <span class="dg-name">${p.name}${isMe?' (You)':''}${isHot?'<span class="mp-hot-seat-badge">HOT SEAT</span>':''}${rally}</span>
+        <span style="font-size:10px">${streak}</span>
+        <span class="dg-score">${p.score||0}</span>
+        <span class="dg-ready">${p.ready?'\u2705':''}</span>
+      </div>`;
+    }).join('');
+  }else{dugout.classList.remove('show')}
+
+  // ── Hot seat banner ──
   const banner=$('hotSeatBanner');
   if(hotSeat&&playerCount>=3){
     banner.textContent='\uD83D\uDD25 '+hotSeat.name+' is in the Hot Seat!';
     banner.classList.add('show');
   }else{banner.classList.remove('show')}
 
-  // Use podium layout for 3+ players, simple rows for 2
+  // ── Full leaderboard (podium) ──
+  const medals=['\uD83E\uDD47','\uD83E\uDD48','\uD83E\uDD49',''];
+  const rankClasses=['rank-1','rank-2','rank-3',''];
   if(playerCount>=3){
     $('mpScoresList').innerHTML=sorted.map((p,i)=>{
       const isMe=p.id===S.playerId;
@@ -1237,7 +1347,6 @@ function renderMPScores(){
       </div>`;
     }).join('');
   }else{
-    // 2-player: simple rows (original style)
     $('mpScoresList').innerHTML=sorted.map((p,i)=>{
       const medal=i===0?'\uD83E\uDD47 ':'\uD83E\uDD48 ';
       const isMe=p.id===S.playerId;
@@ -1280,8 +1389,17 @@ function startGame(gameId,away,home,awayId,homeId){
   abReset();
   $('atbatResult').className='atbat-result';
 
-  if(S.isMultiplayer){$('soloScores').style.display='none';$('mpScores').style.display='';mpSendScore();document.querySelector('.delay-bar').style.display='none'}
-  else{$('soloScores').style.display='';$('mpScores').style.display='none';document.querySelector('.delay-bar').style.display=''}
+  if(S.isMultiplayer){
+    $('soloScores').style.display='none';$('mpScores').style.display='';
+    $('mpSpotlight').classList.add('show');
+    document.querySelector('.delay-bar').style.display='none';
+    mpSendScore();mpState='WAITING';mpHostPitchNum=0;mpRallyStreaks={};
+    $('mpSyncBar').classList.remove('show');
+  }else{
+    $('soloScores').style.display='';$('mpScores').style.display='none';
+    $('mpSpotlight').classList.remove('show');$('mpDugout').classList.remove('show');
+    document.querySelector('.delay-bar').style.display='';
+  }
 
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');startTicker();renderGameLB();
   feedBuffer=[];firstFeedApplied=false;mpLastPitchNum=0;mpPendingPitch=null;mpCountdownActive=false;mpResultShowing=false;mpFirstFetch=true;midAtBatLocked=false;soloFirstExtract=true;
@@ -1308,13 +1426,22 @@ let mpCountdownTimer=null;let mpPendingPitch=null;let mpCountdownActive=false;le
 // HOST: fetch API, broadcast state, wait for all ready, trigger countdown
 function mpHostStart(){
   mpHostFetch();
-  // Listen for players ready — hot seat mechanic for 3+ players
+  // Listen for players ready — sync handshake before countdown
   roomRef.child('players').on('value',snap=>{
     S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
-    if(mpPendingPitch&&S.gameActive&&!mpCountdownActive){
-      const players=Object.values(S.mpPlayers);
-      if(players.length>0&&players.every(p=>p.ready===true)){
-        // ALL players ready — clean up hot seat reveal, then trigger countdown
+    if(mpPendingPitch&&S.gameActive&&!mpCountdownActive&&mpState!=='COUNTDOWN'){
+      const playerArr=Object.values(S.mpPlayers);
+      const total=playerArr.length;
+      const readyCount=playerArr.filter(p=>p.ready===true).length;
+
+      // Play pop for each new ready (others hear it via their own lock-in)
+      // Show progress on status bar
+      if(readyCount>0&&readyCount<total){
+        $('statusBar').textContent='\u2705 '+readyCount+'/'+total+' players ready...';
+      }
+
+      if(total>0&&readyCount>=total){
+        // ALL players ready — handshake complete, broadcast countdown
         roomRef.child('hotSeatPick').remove();
         const safePitch=JSON.parse(JSON.stringify(mpPendingPitch,(k,v)=>v===null?0:v));
         roomRef.child('countdown').set({t:Date.now(),p:safePitch});
@@ -1325,7 +1452,7 @@ function mpHostStart(){
   // Listen for countdown (host resolves at same time as clients)
   roomRef.child('countdown').on('value',snap=>{
     const cd=snap.val();if(!cd||!cd.p)return;
-    mpRunCountdown(cd.p);
+    triggerPitchSequence(cd.p);
   });
 }
 
@@ -1440,27 +1567,45 @@ async function mpHostFetch(){
 
 // CLIENT: listen to Firebase for everything
 function mpClientStart(){
+  let clientPitchNum=0;
   roomRef.child('gameState').on('value',snap=>{const gs=snap.val();if(gs)mpApplyGameState(gs)});
   roomRef.child('pendingPitch').on('value',snap=>{
     const pp=snap.val();if(!pp)return;
-    midAtBatLocked=false;// New pitch means we can predict
-    $('hotSeatReveal').classList.remove('show');// Clear previous hot seat reveal
+    clientPitchNum=pp.n;
+    midAtBatLocked=false;
+    $('hotSeatReveal').classList.remove('show');
+    $('mpSyncBar').classList.remove('show');
+    mpState='LIVE_PITCH';
     setPred(true);resetPitchState();
     $('statusBar').textContent='\uD83D\uDCE1 Pitch #'+pp.n+' \u2014 make your picks!';$('statusBar').className='status-bar';
   });
-  roomRef.child('countdown').on('value',snap=>{const cd=snap.val();if(cd&&cd.p)mpRunCountdown(cd.p)});
-  roomRef.child('players').on('value',snap=>{S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores()});
-  // Mid-at-bat lock — host broadcasts this when joining mid-at-bat
+  roomRef.child('countdown').on('value',snap=>{const cd=snap.val();if(cd&&cd.p)triggerPitchSequence(cd.p)});
+  roomRef.child('players').on('value',snap=>{
+    S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
+    // Show ready count progress
+    const total=Object.keys(S.mpPlayers).length;
+    const ready=Object.values(S.mpPlayers).filter(p=>p.ready===true).length;
+    if(ready>0&&ready<total&&mpState==='LIVE_PITCH'){
+      $('statusBar').textContent='\u2705 '+ready+'/'+total+' players ready...';
+    }
+  });
+  // Sync check: detect if client falls behind host's pitch count
+  roomRef.child('hostPitchNum').on('value',snap=>{
+    const hpn=snap.val();
+    if(hpn&&clientPitchNum>0&&hpn>clientPitchNum+1){
+      $('mpSyncBar').classList.add('show');
+    }else{
+      $('mpSyncBar').classList.remove('show');
+    }
+  });
+  // Mid-at-bat lock
   roomRef.child('midAtBatLocked').on('value',snap=>{
     const locked=snap.val();
     if(locked){
-      midAtBatLocked=true;
-      setPred(false);
+      midAtBatLocked=true;setPred(false);
       document.querySelectorAll('.ab-btn').forEach(b=>b.disabled=true);
       $('statusBar').textContent='\u23F8 At-bat in progress \u2014 waiting for next batter...';$('statusBar').className='status-bar paused';
-    }else if(locked===false&&midAtBatLocked){
-      midAtBatLocked=false;
-    }
+    }else if(locked===false&&midAtBatLocked){midAtBatLocked=false}
   });
 }
 
@@ -1578,44 +1723,79 @@ function mpApplyGameState(gs){
 }
 
 // Shared: synced 3-2-1 countdown then resolve — runs on BOTH host and client
-function mpRunCountdown(pitch){
+// ── Centralized MP state ──
+let mpState='WAITING'; // WAITING | COUNTDOWN | LIVE_PITCH | REVEAL
+let mpHostPitchNum=0; // Track host's pitch count for sync
+
+function triggerPitchSequence(pitch){
   if(mpCountdownActive)return;
-  mpCountdownActive=true;
+  mpCountdownActive=true;mpState='COUNTDOWN';
   if(mpCountdownTimer){clearInterval(mpCountdownTimer);mpCountdownTimer=null}
+
+  // Disable ALL inputs during countdown
   setPred(false);
+  document.querySelectorAll('.pred-btn,.ab-btn,.ptype-btn').forEach(b=>b.disabled=true);
   if(S.userPick&&!pitchLocked)lockPitchPick();
   if(navigator.vibrate)navigator.vibrate([100,50,100]);
-  // Hide hot seat reveal during countdown
+
+  // Play whistle — all players ready
+  playWhistle();
+
+  // Hide hot seat reveal
   $('hotSeatReveal').classList.remove('show');
+  $('mpSyncBar').classList.remove('show');
+
+  // Show full-screen overlay
+  const overlay=$('pitchOverlay');
+  const countEl=$('poCount');
+  overlay.classList.add('show');
+
   let sec=3;
+  countEl.textContent='3';
   $('statusBar').textContent='\uD83D\uDD25 PITCH REVEAL IN 3...';$('statusBar').className='status-bar countdown';
+
   mpCountdownTimer=setInterval(()=>{
     sec--;
-    if(sec>0){$('statusBar').textContent='\uD83D\uDD25 PITCH REVEAL IN '+sec+'...'}
-    else if(sec===0){$('statusBar').textContent='\u26BE HERE COMES THE PITCH!'}
-    else{
+    if(sec>0){
+      countEl.textContent=String(sec);
+      $('statusBar').textContent='\uD83D\uDD25 PITCH REVEAL IN '+sec+'...';
+    }else if(sec===0){
+      countEl.innerHTML='<span class="po-pitch">\u26BE</span>';
+      $('statusBar').textContent='\u26BE HERE COMES THE PITCH!';
+    }else{
       clearInterval(mpCountdownTimer);mpCountdownTimer=null;
+      overlay.classList.remove('show');
       mpCountdownActive=false;
+      mpState='REVEAL';
+
       resolvePitch(pitch);
+      mpHostPitchNum=pitch.pitchNum||mpHostPitchNum;
+
+      // Track rally streaks
+      const myGot=S.userPick?(scoreCall(S.userPick,pitch.callCode,pitch.playResult,pitch.countBalls,pitch.countStrikes)>0):false;
+      checkRallyBadge(S.playerId,myGot);
+
       const hasAbResult=(pitch.isComplete||pitch.isLastPitchOfAB)&&pitch.abResult&&S.atBatResolved!==S.lastBatterId;
       if(hasAbResult){
         mpResultShowing=true;
         setTimeout(()=>{resolveAtBat(pitch.abResult,pitch.abRbi||0)},1200);
-        // 4-second pause for scoreboard animation before next round
-        setTimeout(()=>{mpResultShowing=false;renderMPScores()},4000);
+        setTimeout(()=>{mpResultShowing=false;mpState='WAITING';renderMPScores()},4000);
       }else{
-        // 4-second pause even without AB result so scoreboard can animate
         mpResultShowing=true;
-        setTimeout(()=>{mpResultShowing=false;renderMPScores()},4000);
+        setTimeout(()=>{mpResultShowing=false;mpState='WAITING';renderMPScores()},4000);
       }
-      // Host: clean up Firebase for next pitch cycle
-      if(S.isHost&&roomRef){roomRef.child('countdown').remove();roomRef.child('pendingPitch').remove();roomRef.child('hotSeatPick').remove()}
-      // Re-enable picks after 4s pause
+      // Host: clean up Firebase
+      if(S.isHost&&roomRef){roomRef.child('countdown').remove();roomRef.child('pendingPitch').remove();roomRef.child('hotSeatPick').remove();
+        roomRef.child('hostPitchNum').set(mpHostPitchNum)}
+      // Re-enable picks after pause
       const reEnableDelay=hasAbResult?4500:4000;
-      setTimeout(()=>{if(S.gameActive&&!S.gamePaused){setPred(true);resetPitchState()}},reEnableDelay);
+      setTimeout(()=>{if(S.gameActive&&!S.gamePaused){setPred(true);resetPitchState();mpState='LIVE_PITCH'}},reEnableDelay);
     }
   },800);
 }
+
+// Legacy alias — mpRunCountdown calls triggerPitchSequence
+function mpRunCountdown(pitch){triggerPitchSequence(pitch)}
 
 /* ══════════════════════════════════════
    FETCH + DELAYED FEED
@@ -2392,6 +2572,35 @@ function playSound(type){
       osc.start(t);osc.stop(t+0.15);
     }
   }catch(e){}
+}
+// ── MP Sound Effects ──
+function ensureAudio(){if(!audioCtx)audioCtx=new AudioCtx();return audioCtx}
+function playPop(){
+  try{const ctx=ensureAudio();const o=ctx.createOscillator();const g=ctx.createGain();
+  o.connect(g);g.connect(ctx.destination);o.frequency.setValueAtTime(880,ctx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(1200,ctx.currentTime+0.05);
+  g.gain.setValueAtTime(0.15,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.12);
+  o.start(ctx.currentTime);o.stop(ctx.currentTime+0.12)}catch(e){}
+}
+function playWhistle(){
+  try{const ctx=ensureAudio();
+  [0,0.15,0.3].forEach((d,i)=>{
+    const o=ctx.createOscillator();const g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);o.type='sine';
+    o.frequency.setValueAtTime(i===2?1400:1200,ctx.currentTime+d);
+    g.gain.setValueAtTime(0.12,ctx.currentTime+d);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+d+(i===2?0.25:0.1));
+    o.start(ctx.currentTime+d);o.stop(ctx.currentTime+d+(i===2?0.25:0.1));
+  })}catch(e){}
+}
+function playRally(){
+  try{const ctx=ensureAudio();
+  [0,0.1,0.2,0.3].forEach((d,i)=>{
+    const o=ctx.createOscillator();const g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);o.type='triangle';
+    o.frequency.setValueAtTime(600+i*200,ctx.currentTime+d);
+    g.gain.setValueAtTime(0.1,ctx.currentTime+d);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+d+0.15);
+    o.start(ctx.currentTime+d);o.stop(ctx.currentTime+d+0.15);
+  })}catch(e){}
 }
 
 /* ══════════════════════════════════════
@@ -3170,5 +3379,13 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('beforeunload',()=>{if(S.userScore>0){saveLB();saveUserStats()}});
 // Auth handles initial screen — don't show home until logged in
 </script>
+
+<!-- Countdown Overlay -->
+<div class="pitch-overlay" id="pitchOverlay">
+  <div class="po-label">PITCH INCOMING</div>
+  <div class="po-count" id="poCount">3</div>
+</div>
+
+<!-- Sound effects are defined inside the main script block above -->
 </body>
 </html>
