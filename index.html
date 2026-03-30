@@ -235,6 +235,29 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .mp-sync-bar{display:none;background:linear-gradient(135deg,#1e3a5f,#0f3460);border-radius:var(--radius);padding:8px 12px;text-align:center;font-size:12px;font-weight:700;color:var(--blue);animation:readyPulse 1s ease-in-out infinite}
 .mp-sync-bar.show{display:block}
 
+/* ── Double Down wager button ── */
+.mp-wager{display:none;background:linear-gradient(135deg,#78350f,#92400e);border-radius:var(--radius);padding:8px 12px;text-align:center;margin:2px 0;border:1px solid rgba(245,158,11,0.3)}
+.mp-wager.show{display:block}
+.mp-wager-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:4px}
+.mp-wager-btn{border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:800;cursor:pointer;transition:all .15s}
+.mp-wager-btn:active{transform:scale(0.95)}
+.mp-wager-btn.dd{background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;margin-right:6px}
+.mp-wager-btn.dd.active{outline:3px solid var(--accent);box-shadow:0 0 12px rgba(245,158,11,0.4)}
+.mp-wager-btn.safe{background:var(--card2);color:var(--muted)}
+.mp-wager-status{font-size:10px;color:var(--accent);margin-top:4px;font-weight:600}
+
+/* ── Score roll animation ── */
+.score-roll{display:inline-block;transition:none}
+.score-roll.rolling{animation:scoreRoll .4s ease-out}
+@keyframes scoreRoll{0%{transform:translateY(8px);opacity:0.3}100%{transform:translateY(0);opacity:1}}
+
+/* ── Spotlight stat rotation ── */
+.mp-spot-stat{font-size:10px;color:var(--muted);margin-top:2px;min-height:14px;transition:opacity .3s}
+
+/* ── Impact flash on correct hit/homer ── */
+.impact-flash{position:fixed;inset:0;pointer-events:none;z-index:199;opacity:0;transition:opacity .15s}
+.impact-flash.show{opacity:1}
+
 .halftime-alert{display:none;background:linear-gradient(135deg,#78350f,#92400e);border-radius:var(--radius);padding:12px;text-align:center;animation:pulse 2s ease-in-out infinite}
 .halftime-alert.show{display:block}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.85}}
@@ -566,12 +589,19 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   <div class="waiting-msg" id="waitingMsg" style="display:none;text-align:center;font-size:12px;color:var(--muted);padding:2px 0"></div>
   <!-- MP Top 2 Spotlight -->
   <div class="mp-spotlight" id="mpSpotlight">
-    <div class="mp-spot-card" id="spot1"><div class="spot-rank">1st Place</div><div class="spot-name" id="spot1Name">---</div><div class="spot-score" id="spot1Score">0</div><div class="spot-ready" id="spot1Ready"></div></div>
+    <div class="mp-spot-card" id="spot1"><div class="spot-rank">1st Place</div><div class="spot-name" id="spot1Name">---</div><div class="spot-score" id="spot1Score">0</div><div class="mp-spot-stat" id="spot1Stat"></div><div class="spot-ready" id="spot1Ready"></div></div>
     <div class="mp-spot-vs">VS</div>
-    <div class="mp-spot-card" id="spot2"><div class="spot-rank">2nd Place</div><div class="spot-name" id="spot2Name">---</div><div class="spot-score" id="spot2Score">0</div><div class="spot-ready" id="spot2Ready"></div></div>
+    <div class="mp-spot-card" id="spot2"><div class="spot-rank">2nd Place</div><div class="spot-name" id="spot2Name">---</div><div class="spot-score" id="spot2Score">0</div><div class="mp-spot-stat" id="spot2Stat"></div><div class="spot-ready" id="spot2Ready"></div></div>
   </div>
   <!-- MP Dugout (3rd/4th place) -->
   <div class="mp-dugout" id="mpDugout"><div class="mp-dugout-header">&#9917; Dugout</div><div id="mpDugoutList"></div></div>
+  <!-- Double Down Wager -->
+  <div class="mp-wager" id="mpWager">
+    <div class="mp-wager-label">Double Down?</div>
+    <button class="mp-wager-btn dd" id="wagerDD" onclick="toggleWager(true)">&#x1F525; 2x Risk</button>
+    <button class="mp-wager-btn safe" id="wagerSafe" onclick="toggleWager(false)">Play Safe</button>
+    <div class="mp-wager-status" id="wagerStatus"></div>
+  </div>
   <!-- Syncing indicator -->
   <div class="mp-sync-bar" id="mpSyncBar">&#8635; Syncing with host...</div>
   <!-- Multiplayer scores -->
@@ -1293,6 +1323,11 @@ function renderMPScores(){
     $('spot2Score').textContent=p2.score||0;
     $('spot1Ready').textContent=p1.ready?'\u2705':'';
     $('spot2Ready').textContent=p2.ready?'\u2705':'';
+    // Stat lines
+    const s1Streak=(p1.streak||0)>=2?'\uD83D\uDD25 '+p1.streak+' streak':'';
+    const s2Streak=(p2.streak||0)>=2?'\uD83D\uDD25 '+p2.streak+' streak':'';
+    $('spot1Stat').textContent=s1Streak;
+    $('spot2Stat').textContent=s2Streak;
   }else{spotlight.classList.remove('show')}
 
   // ── Dugout (3rd/4th place) ──
@@ -1395,10 +1430,12 @@ function startGame(gameId,away,home,awayId,homeId){
     document.querySelector('.delay-bar').style.display='none';
     mpSendScore();mpState='WAITING';mpHostPitchNum=0;mpRallyStreaks={};
     $('mpSyncBar').classList.remove('show');
+    collapseLeagueInMP();startSpotRotation();
   }else{
     $('soloScores').style.display='';$('mpScores').style.display='none';
     $('mpSpotlight').classList.remove('show');$('mpDugout').classList.remove('show');
     document.querySelector('.delay-bar').style.display='';
+    stopSpotRotation();
   }
 
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');startTicker();renderGameLB();
@@ -1416,7 +1453,7 @@ function startGame(gameId,away,home,awayId,homeId){
     fetchLoop();S.queueInterval=setInterval(processQueue,300);
   }
 }
-function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);clearTimeout(mpCountdownTimer);stopTicker();if(S.userScore>0){saveLB();saveUserStats()}}
+function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);clearTimeout(mpCountdownTimer);stopTicker();stopSpotRotation();hideWager();$('mpSpotlight').classList.remove('show');$('mpDugout').classList.remove('show');$('mpSyncBar').classList.remove('show');$('pitchOverlay').classList.remove('show');collapseLeagueInMP();if(S.userScore>0){saveLB();saveUserStats()}}
 
 /* ══════════════════════════════════════
    MULTIPLAYER SYNC — Host drives everything
@@ -1732,8 +1769,8 @@ function triggerPitchSequence(pitch){
   mpCountdownActive=true;mpState='COUNTDOWN';
   if(mpCountdownTimer){clearInterval(mpCountdownTimer);mpCountdownTimer=null}
 
-  // Disable ALL inputs during countdown
-  setPred(false);
+  // Disable ALL inputs during countdown, hide wager
+  setPred(false);hideWager();
   document.querySelectorAll('.pred-btn,.ab-btn,.ptype-btn').forEach(b=>b.disabled=true);
   if(S.userPick&&!pitchLocked)lockPitchPick();
   if(navigator.vibrate)navigator.vibrate([100,50,100]);
@@ -1789,7 +1826,7 @@ function triggerPitchSequence(pitch){
         roomRef.child('hostPitchNum').set(mpHostPitchNum)}
       // Re-enable picks after pause
       const reEnableDelay=hasAbResult?4500:4000;
-      setTimeout(()=>{if(S.gameActive&&!S.gamePaused){setPred(true);resetPitchState();mpState='LIVE_PITCH'}},reEnableDelay);
+      setTimeout(()=>{if(S.gameActive&&!S.gamePaused){setPred(true);resetPitchState();mpState='LIVE_PITCH';showWagerIfMP()}},reEnableDelay);
     }
   },800);
 }
@@ -2365,9 +2402,24 @@ function resolvePitch(p){
     if(S.pitchTypePick&&uPts>0&&classifyPitchType(p.typeCode)===S.pitchTypePick)uPts+=20;
     S.totalPredictions++;
     if(uPts>0){uPts=Math.round(uPts*sit.mult);S.streak++;S.correctCount++;if(S.streak>S.bestStreak)S.bestStreak=S.streak;if(S.streak>=3)uPts+=Math.floor((S.streak-2)*uPts*0.1)}else{S.streak=0}
-    S.userScore+=uPts;if(uPts>0)saveUserBalance(uPts);
-    if(uPts>0){$('statusBar').textContent='\u2705 +'+uPts+'! '+p.desc;$('statusBar').className='status-bar correct';if(navigator.vibrate)navigator.vibrate([50,30,50]);playSound(p.callCode==='E'?'homer':'correct');if(p.callCode==='E')triggerConfetti()}
-    else{$('statusBar').textContent='\u274C '+p.desc;$('statusBar').className='status-bar wrong';if(navigator.vibrate)navigator.vibrate(100);playSound('wrong');triggerShake()}
+    // Apply wager: 2x if correct, -50 if wrong
+    if(S.isMultiplayer&&mpWagerActive){
+      if(uPts>0){uPts=uPts*2}else{uPts=-50}
+      mpWagerActive=false;hideWager();
+    }
+    S.userScore+=uPts;if(S.userScore<0)S.userScore=0;
+    if(uPts>0)saveUserBalance(uPts);
+    if(uPts>0){
+      $('statusBar').textContent='\u2705 +'+(mpWagerActive?'':'')+uPts+'! '+p.desc;$('statusBar').className='status-bar correct';
+      if(navigator.vibrate)navigator.vibrate([50,30,50]);playSound(p.callCode==='E'?'homer':'correct');
+      if(p.callCode==='E'){triggerConfetti();flashImpact('rgba(74,222,128,0.3)')}
+      if(p.callCode==='E'||p.playResult==='Single'||p.playResult==='Double'||p.playResult==='Triple'||p.playResult==='Home Run')flashImpact('rgba(74,222,128,0.3)');
+      animateScoreRoll($('yourScore'));
+    }else{
+      $('statusBar').textContent='\u274C '+(uPts<0?uPts+' ':'')+p.desc;$('statusBar').className='status-bar wrong';
+      if(navigator.vibrate)navigator.vibrate(100);playSound('wrong');triggerShake();
+      if(uPts<0)animateScoreRoll($('yourScore'));
+    }
   }else{$('statusBar').textContent='\u23E9 '+p.desc+' (no pick)';$('statusBar').className='status-bar'}
 
   if(!S.isMultiplayer){
@@ -3349,6 +3401,80 @@ function renderGameLB(){
 }
 
 /* ══════════════════════════════════════
+   WAGER / DOUBLE DOWN
+   ══════════════════════════════════════ */
+let mpWagerActive=false;
+function toggleWager(doubleDown){
+  mpWagerActive=doubleDown;
+  $('wagerDD').classList.toggle('active',doubleDown);
+  $('wagerSafe').classList.toggle('active',!doubleDown);
+  $('wagerStatus').textContent=doubleDown?'\uD83D\uDD25 2x points if correct, -50 if wrong!':'Playing safe.';
+  if(roomRef)roomRef.child('players/'+S.playerId+'/wager').set(doubleDown);
+}
+function showWagerIfMP(){
+  if(S.isMultiplayer&&Object.keys(S.mpPlayers).length>=2){
+    $('mpWager').classList.add('show');
+    mpWagerActive=false;
+    $('wagerDD').classList.remove('active');
+    $('wagerSafe').classList.remove('active');
+    $('wagerStatus').textContent='';
+  }else{$('mpWager').classList.remove('show')}
+}
+function hideWager(){$('mpWager').classList.remove('show')}
+
+/* ══════════════════════════════════════
+   SCORE ROLL ANIMATION
+   ══════════════════════════════════════ */
+function animateScoreRoll(el){
+  el.classList.remove('score-roll','rolling');
+  void el.offsetWidth;// force reflow
+  el.classList.add('score-roll','rolling');
+  setTimeout(()=>el.classList.remove('rolling'),400);
+}
+
+/* ══════════════════════════════════════
+   IMPACT FLASH
+   ══════════════════════════════════════ */
+function flashImpact(color){
+  const el=$('impactFlash');
+  el.style.background=color||'rgba(74,222,128,0.3)';
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),200);
+}
+
+/* ══════════════════════════════════════
+   SPOTLIGHT STAT ROTATION (waiting phase)
+   ══════════════════════════════════════ */
+let spotRotateTimer=null;
+function startSpotRotation(){
+  if(spotRotateTimer)clearInterval(spotRotateTimer);
+  spotRotateTimer=setInterval(()=>{
+    if(!S.isMultiplayer||mpState!=='LIVE_PITCH')return;
+    const sorted=Object.entries(S.mpPlayers).map(([id,p])=>({...p,id})).sort((a,b)=>(b.score||0)-(a.score||0));
+    if(sorted.length<2)return;
+    const stats=[];
+    for(const p of sorted){
+      if((p.streak||0)>=2)stats.push(p.name+' is on a '+p.streak+'-pitch heater!');
+      if(mpRallyStreaks[p.id]>=3)stats.push(p.name+' has a Rally streak going!');
+      if(p.score>=100)stats.push(p.name+' leading with '+p.score+' pts');
+    }
+    if(stats.length===0)return;
+    const stat=stats[Math.floor(Math.random()*stats.length)];
+    const el=document.querySelector('.mp-spot-stat');
+    if(el){el.style.opacity='0';setTimeout(()=>{el.textContent='\uD83D\uDCCA '+stat;el.style.opacity='1'},300)}
+  },4000);
+}
+function stopSpotRotation(){if(spotRotateTimer){clearInterval(spotRotateTimer);spotRotateTimer=null}}
+
+/* ══════════════════════════════════════
+   LEAGUE SCORES COLLAPSE IN MP
+   ══════════════════════════════════════ */
+function collapseLeagueInMP(){
+  const ticker=document.querySelector('.league-ticker');
+  if(ticker){ticker.style.display=S.isMultiplayer?'none':''}
+}
+
+/* ══════════════════════════════════════
    DYNAMIC BACKGROUND
    ══════════════════════════════════════ */
 function updateDynamicBg(dt){
@@ -3379,6 +3505,9 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('beforeunload',()=>{if(S.userScore>0){saveLB();saveUserStats()}});
 // Auth handles initial screen — don't show home until logged in
 </script>
+
+<!-- Impact Flash -->
+<div class="impact-flash" id="impactFlash"></div>
 
 <!-- Countdown Overlay -->
 <div class="pitch-overlay" id="pitchOverlay">
