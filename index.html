@@ -379,15 +379,23 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .pi-val{font-size:12px;font-weight:700;color:var(--text)}
 .pi-val.speed{color:#4ade80;font-size:14px}
 .pi-val.type{color:var(--accent)}
-.pi-sequence{display:flex;gap:3px;flex-wrap:wrap;justify-content:center;padding:4px 0}
-.pi-seq-dot{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#fff}
+.pi-sequence{display:flex;gap:3px;flex-wrap:wrap;justify-content:center;padding:4px 0;max-height:60px;overflow:hidden;transition:max-height .3s ease}
+.pi-sequence.expanded{max-height:400px}
+.pi-seq-dot{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#fff;flex-shrink:0}
 .pi-seq-dot.ball{background:#166534}.pi-seq-dot.strike{background:#991b1b}.pi-seq-dot.foul{background:#854d0e}.pi-seq-dot.inplay{background:#1e40af}.pi-seq-dot.other{background:#334155}
+.pi-seq-expand{display:none;font-size:9px;color:var(--accent);cursor:pointer;text-align:center;padding:2px 0;font-weight:700}
+.pi-seq-expand.show{display:block}
 .diamond-svg{width:85px;height:85px}
 .on-base-text{font-size:8px;color:var(--muted);text-align:center;line-height:1.3}
 .on-base-text span{color:var(--accent);font-weight:700}
 /* Streak fire animation */
 .score-card.streak.on-fire{animation:fireGlow 0.6s ease-in-out infinite alternate}
 @keyframes fireGlow{0%{box-shadow:0 0 8px rgba(245,158,11,0.3)}100%{box-shadow:0 0 20px rgba(245,158,11,0.7)}}
+/* Heat map: current pitch pulse */
+@keyframes pitchPulse{0%{r:10;opacity:1}50%{r:16;opacity:0.6}100%{r:10;opacity:1}}
+@keyframes pitchFlame{0%{r:10;opacity:0.8;filter:blur(0)}50%{r:18;opacity:0.3;filter:blur(2px)}100%{r:10;opacity:0;filter:blur(4px)}}
+.pdot-current circle{animation:pitchPulse 1.2s ease-in-out infinite}
+.pdot-flame circle{fill:#f59e0b;animation:pitchFlame 0.8s ease-out forwards}
 /* End-game overlay */
 .endgame-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:200;justify-content:center;align-items:center;padding:16px}
 .endgame-overlay.show{display:flex}
@@ -433,6 +441,8 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .ptype-btn:active{transform:scale(0.95)}.ptype-btn.sel{outline:2px solid var(--accent);color:var(--text)}
 
 /* Status */
+/* Sticky prediction controls — always visible at bottom */
+.sticky-controls{position:sticky;bottom:0;z-index:50;background:var(--bg);padding-bottom:calc(4px + var(--safe-bot))}
 .status-bar{background:var(--card);border-radius:var(--radius);padding:10px 12px;text-align:center;font-weight:600;font-size:14px;transition:background .3s,color .3s;min-height:42px;display:flex;align-items:center;justify-content:center}
 .status-bar.correct{background:#166534;color:#4ade80}
 .status-bar.wrong{background:#7f1d1d;color:#fca5a5}
@@ -773,10 +783,12 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
       <div class="pi-row"><span class="pi-label">Pitches</span><span class="pi-val" id="piCount">0</span></div>
       <div class="pi-header" style="margin-top:4px">At-Bat Sequence</div>
       <div class="pi-sequence" id="piSequence"></div>
+      <div class="pi-seq-expand" id="piSeqExpand" onclick="toggleSeqExpand()">View Full History</div>
     </div>
   </div>
 
-  <!-- PITCH-BY-PITCH SECONDARY -->
+  <!-- PITCH-BY-PITCH SECONDARY — sticky controls -->
+  <div class="sticky-controls">
   <div class="pitch-section">
     <div class="pitch-section-header"><span>&#9918; Pitch Call</span><span id="pitchOddsLabel" style="font-size:9px;color:var(--accent)"></span></div>
     <div class="pred-grid">
@@ -804,6 +816,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 
   <div class="status-bar" id="statusBar">Waiting for game data...</div>
   <div class="delay-bar"><label>&#128250; TV Delay</label><input type="range" id="delaySlider" min="0" max="90" value="30"><div class="delay-val" id="delayVal">30s</div><button class="sync-btn" id="syncBtn">Sync 20s</button><span class="live-badge" id="liveBadge">&#9679; LIVE</span></div>
+  </div><!-- /sticky-controls -->
 
   <div class="tab-bar">
     <button class="tab-btn active" data-tab="pitchLog">Pitch Log</button>
@@ -2595,6 +2608,20 @@ function resetSequenceForNewBatter(){abSequence=[];renderSequence();totalPitchCo
 function renderSequence(){
   const el=$('piSequence');
   el.innerHTML=abSequence.map(s=>'<div class="pi-seq-dot '+s.cls+'">'+s.lbl+'</div>').join('');
+  // Show expand button if >9 dots (3 rows)
+  const expandBtn=$('piSeqExpand');
+  if(abSequence.length>9){
+    expandBtn.classList.add('show');
+    expandBtn.textContent=el.classList.contains('expanded')?'Collapse':'View Full History ('+abSequence.length+')';
+  }else{
+    expandBtn.classList.remove('show');
+    el.classList.remove('expanded');
+  }
+}
+function toggleSeqExpand(){
+  const el=$('piSequence');
+  el.classList.toggle('expanded');
+  $('piSeqExpand').textContent=el.classList.contains('expanded')?'Collapse':'View Full History ('+abSequence.length+')';
 }
 function drawPitch(p){
   // Skip if no pitch tracking data (null in solo, 0/0 in MP where Firebase strips nulls)
@@ -2610,6 +2637,8 @@ function drawPitch(p){
   else if(cc==='F')color='#f59e0b';else if(cc==='D'||cc==='E'||cc==='X')color='#3b82f6';
 
   const dots=$('pitchDots');
+  // Remove pulse from previous "current" dot
+  dots.querySelectorAll('.pdot-current').forEach(g=>g.classList.remove('pdot-current'));
   dots.querySelectorAll('.pdot').forEach(g=>{const op=Math.max(0.2,parseFloat(g.getAttribute('opacity')||1)-0.15);g.setAttribute('opacity',op)});
 
   S.pitchHistory.push({x:svgX,y:svgY,color});
@@ -2626,8 +2655,20 @@ function drawPitch(p){
   $('szH2').setAttribute('y1',szTop2+2*t);$('szH2').setAttribute('y2',szTop2+2*t);
   [$('szV1'),$('szV2')].forEach(l=>{l.setAttribute('y1',szTop2);l.setAttribute('y2',szBot2)});
 
+  // High-velocity flame effect (95+ mph)
+  const isHeat=p.speed&&p.speed>=95;
+  if(isHeat){
+    const flame=document.createElementNS('http://www.w3.org/2000/svg','g');
+    flame.setAttribute('class','pdot-flame');
+    const fc=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    fc.setAttribute('cx',svgX);fc.setAttribute('cy',svgY);fc.setAttribute('r','10');
+    fc.setAttribute('fill','#f59e0b');fc.setAttribute('opacity','0.6');
+    flame.appendChild(fc);dots.appendChild(flame);
+    setTimeout(()=>flame.remove(),800);
+  }
+
   const g=document.createElementNS('http://www.w3.org/2000/svg','g');
-  g.setAttribute('class','pdot');g.setAttribute('opacity','1');
+  g.setAttribute('class','pdot pdot-current');g.setAttribute('opacity','1');
   const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');
   circle.setAttribute('cx',svgX);circle.setAttribute('cy',svgY);circle.setAttribute('r','10');
   circle.setAttribute('fill',color);circle.setAttribute('stroke','#fff');circle.setAttribute('stroke-width','1.5');
