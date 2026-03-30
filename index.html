@@ -257,6 +257,26 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .mp-chat-input:focus{border-color:var(--blue)}
 .mp-chat-send{border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;background:var(--blue);color:#fff}
 
+/* ── Debug Sim Panel ── */
+.debug-panel{display:none;background:var(--card);border-radius:var(--radius);padding:10px;margin:4px 0;border:1px solid #334155}
+.debug-panel.show{display:block}
+.debug-panel h4{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+.debug-log{max-height:200px;overflow-y:auto;font-family:'Courier New',monospace;font-size:10px;line-height:1.5;color:var(--text)}
+.debug-log .dl-pitch{padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.03)}
+.debug-log .dl-ok{color:#4ade80}.debug-log .dl-err{color:#f87171;font-weight:700}
+.debug-log .dl-warn{color:#fbbf24}.debug-log .dl-info{color:var(--muted)}
+.debug-stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.debug-stat{background:var(--card2);border-radius:8px;padding:6px 10px;font-size:10px;text-align:center}
+.debug-stat .ds-val{font-size:16px;font-weight:900;color:var(--accent)}
+.debug-stat .ds-label{font-size:8px;color:var(--muted);text-transform:uppercase}
+.debug-controls{display:flex;gap:6px;margin-bottom:6px}
+.debug-controls button{border:none;border-radius:6px;padding:6px 12px;font-size:10px;font-weight:700;cursor:pointer;transition:transform .1s}
+.debug-controls button:active{transform:scale(0.95)}
+.dbg-play{background:#166534;color:#4ade80}
+.dbg-pause{background:#78350f;color:#fbbf24}
+.dbg-speed{background:var(--card2);color:var(--muted)}
+.dbg-speed.active{background:var(--blue);color:#fff}
+
 /* ── Double Down wager button ── */
 .mp-wager{display:none;background:linear-gradient(135deg,#78350f,#92400e);border-radius:var(--radius);padding:8px 12px;text-align:center;margin:2px 0;border:1px solid rgba(245,158,11,0.3)}
 .mp-wager.show{display:block}
@@ -539,6 +559,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     <button class="btn-solo" id="btnSoloMode">Solo vs CPU</button>
     <button class="btn-friends" id="btnFriendsMode">Play with Friends</button>
   </div>
+  <button id="btnDebugSim" style="width:100%;border:none;border-radius:var(--radius);padding:10px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--muted);margin-top:-4px;transition:transform .1s" onclick="startDebugSim()">&#128736; Debug Sim (2 AI Players)</button>
   <div class="game-list">
     <div class="game-list-header"><h2>Today's Games</h2><button class="refresh-btn" id="refreshGames">Refresh</button></div>
     <div id="gamesList"></div>
@@ -795,6 +816,21 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   <div class="game-lb" id="gameLB">
     <h4>&#127942; Session Leaderboard</h4>
     <div id="gameLBList"></div>
+  </div>
+
+  <!-- Debug Sim Panel -->
+  <div class="debug-panel" id="debugPanel">
+    <h4><span>&#128736; Debug Simulation</span><span id="debugStatus" style="font-size:9px;color:var(--muted);font-weight:400"></span></h4>
+    <div class="debug-controls">
+      <button class="dbg-play" id="dbgPlay" onclick="debugSimResume()">&#9654; Play</button>
+      <button class="dbg-pause" id="dbgPause" onclick="debugSimPause()">&#10074;&#10074; Pause</button>
+      <button class="dbg-speed" data-ds="500" onclick="setDebugSpeed(this)">Fast</button>
+      <button class="dbg-speed active" data-ds="1500" onclick="setDebugSpeed(this)">Normal</button>
+      <button class="dbg-speed" data-ds="4000" onclick="setDebugSpeed(this)">Slow</button>
+      <button style="background:var(--red);color:#fff;margin-left:auto" onclick="stopDebugSim()">&#9632; Stop</button>
+    </div>
+    <div class="debug-stats" id="debugStats"></div>
+    <div class="debug-log" id="debugLog"></div>
   </div>
 
   <!-- League scores ticker -->
@@ -3590,6 +3626,259 @@ function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').repla
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&document.activeElement===$('chatInput')){e.preventDefault();sendChat()}
 });
+
+/* ══════════════════════════════════════
+   DEBUG SIMULATION — 2 AI players
+   ══════════════════════════════════════ */
+let debugSim={active:false,paused:false,speed:1500,timer:null,idx:0,pitches:[],
+  bots:[{name:'Bot Alpha',score:0,streak:0,correct:0,total:0,picks:[]},
+        {name:'Bot Beta',score:0,streak:0,correct:0,total:0,picks:[]}],
+  bugs:[],startTime:0};
+
+// AI pick strategy — semi-realistic based on count and situation
+function aiPick(count,outs,runners){
+  const b=count?parseInt(count.split('-')[0])||0:0;
+  const s=count?parseInt(count.split('-')[1])||0:0;
+  const r=Math.random();
+  // Full count = anything goes
+  if(b===3&&s===2){
+    if(r<0.25)return 'Ball';if(r<0.55)return 'Strike';if(r<0.65)return 'Foul';
+    if(r<0.80)return 'Out';if(r<0.90)return 'Single';return 'Homer';
+  }
+  // Pitcher's count (0-2, 1-2) — likely strike/foul/out
+  if(s===2){
+    if(r<0.15)return 'Ball';if(r<0.35)return 'Strike';if(r<0.55)return 'Foul';
+    if(r<0.75)return 'Out';if(r<0.85)return 'Single';return 'Homer';
+  }
+  // Hitter's count (3-0, 3-1, 2-0) — likely ball
+  if(b>=2&&s<=1){
+    if(r<0.45)return 'Ball';if(r<0.65)return 'Strike';if(r<0.80)return 'Out';
+    if(r<0.90)return 'Single';return 'Double';
+  }
+  // Even count — mixed
+  if(r<0.30)return 'Ball';if(r<0.55)return 'Strike';if(r<0.65)return 'Foul';
+  if(r<0.80)return 'Out';if(r<0.90)return 'Single';return 'Homer';
+}
+
+// At-bat outcome pick
+function aiAbPick(){
+  const r=Math.random();
+  if(r<0.25)return 'Strikeout';if(r<0.40)return 'Walk';if(r<0.55)return 'Groundout';
+  if(r<0.70)return 'Flyout';if(r<0.85)return 'Single';if(r<0.93)return 'Double';
+  if(r<0.97)return 'Triple';return 'Home Run';
+}
+
+async function startDebugSim(){
+  $('btnDebugSim').textContent='Loading game data...';
+  try{
+    // Get yesterday's finished games
+    const d=new Date();d.setDate(d.getDate()-1);
+    const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const r=await fetch('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+ds+'&hydrate=linescore');
+    const sched=await r.json();
+    const games=(sched.dates&&sched.dates[0]&&sched.dates[0].games)||[];
+    const final=games.filter(g=>g.status.abstractGameState==='Final');
+    if(!final.length){$('btnDebugSim').textContent='No completed games found';setTimeout(()=>{$('btnDebugSim').textContent='\uD83D\uDD27 Debug Sim (2 AI Players)'},3000);return}
+
+    const game=final[Math.floor(Math.random()*final.length)];
+    const r2=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+game.gamePk+'/feed/live');
+    const gd=await r2.json();
+    const allPlays=gd.liveData.plays.allPlays||[];
+    const pitches=extractPracticeData(allPlays);
+
+    if(pitches.length<30){$('btnDebugSim').textContent='Not enough pitches, try again';setTimeout(()=>{$('btnDebugSim').textContent='\uD83D\uDD27 Debug Sim (2 AI Players)'},3000);return}
+
+    // Reset bots
+    debugSim.bots=[
+      {name:'Bot Alpha',score:0,streak:0,correct:0,total:0,picks:[]},
+      {name:'Bot Beta',score:0,streak:0,correct:0,total:0,picks:[]}
+    ];
+    debugSim.pitches=pitches;debugSim.idx=0;debugSim.bugs=[];debugSim.active=true;debugSim.paused=false;
+    debugSim.startTime=Date.now();
+
+    // Start the game visually
+    const away=game.teams.away.team.name,home=game.teams.home.team.name;
+    const awayId=game.teams.away.team.id,homeId=game.teams.home.team.id;
+    practiceMode=true;S.isMultiplayer=true;
+    startGame(game.gamePk,away,home,awayId,homeId);
+
+    // Override MP scores to show bots
+    $('soloScores').style.display='none';
+    $('gameTime').textContent='\uD83D\uDD27 Debug Sim: '+away+' vs '+home+' ('+ds+') — '+pitches.length+' pitches';
+
+    // Show debug panel
+    $('debugPanel').classList.add('show');
+    $('debugLog').innerHTML='';
+    $('debugStatus').textContent='Running...';
+    debugLog('info','Loaded '+pitches.length+' pitches from '+away+' vs '+home);
+    debugLog('info','Bot Alpha vs Bot Beta — simulating full game');
+    updateDebugStats();
+
+    $('btnDebugSim').textContent='\uD83D\uDD27 Debug Sim (2 AI Players)';
+
+    // Start simulation loop
+    debugSimStep();
+  }catch(e){
+    $('btnDebugSim').textContent='Error: '+e.message;
+    setTimeout(()=>{$('btnDebugSim').textContent='\uD83D\uDD27 Debug Sim (2 AI Players)'},3000);
+  }
+}
+
+function debugLog(type,msg){
+  const el=document.createElement('div');
+  el.className='dl-pitch dl-'+type;
+  el.textContent='['+new Date().toLocaleTimeString()+'] '+msg;
+  $('debugLog').appendChild(el);
+  $('debugLog').scrollTop=$('debugLog').scrollHeight;
+}
+
+function updateDebugStats(){
+  const b=debugSim.bots;
+  $('debugStats').innerHTML=`
+    <div class="debug-stat"><div class="ds-val">${debugSim.idx}/${debugSim.pitches.length}</div><div class="ds-label">Pitches</div></div>
+    <div class="debug-stat"><div class="ds-val">${b[0].score}</div><div class="ds-label">${b[0].name}</div></div>
+    <div class="debug-stat"><div class="ds-val">${b[1].score}</div><div class="ds-label">${b[1].name}</div></div>
+    <div class="debug-stat"><div class="ds-val">${b[0].total?Math.round(b[0].correct/b[0].total*100):0}%</div><div class="ds-label">Alpha Acc</div></div>
+    <div class="debug-stat"><div class="ds-val">${b[1].total?Math.round(b[1].correct/b[1].total*100):0}%</div><div class="ds-label">Beta Acc</div></div>
+    <div class="debug-stat" style="background:${debugSim.bugs.length?'#7f1d1d':'#166534'}"><div class="ds-val" style="color:${debugSim.bugs.length?'#fca5a5':'#4ade80'}">${debugSim.bugs.length}</div><div class="ds-label">Bugs</div></div>
+  `;
+}
+
+function debugSimStep(){
+  if(!debugSim.active||debugSim.paused)return;
+  if(debugSim.idx>=debugSim.pitches.length){
+    debugSimFinish();return;
+  }
+
+  const pitch=debugSim.pitches[debugSim.idx];
+  debugSim.idx++;
+
+  // Bug checks BEFORE processing
+  const bugsBefore=debugSim.bugs.length;
+
+  // Check: pitch has required data
+  if(!pitch.callCode){
+    const bug='Pitch #'+debugSim.idx+': missing callCode';
+    debugSim.bugs.push(bug);debugLog('err','BUG: '+bug);
+  }
+
+  // Update game UI (reuse practice system)
+  try{
+    // Update matchup display
+    if(pitch.pitcherName)$('pitcherName').textContent=pitch.pitcherName;
+    if(pitch.batterName)$('batterName').textContent=pitch.batterName;
+    if(pitch.pitcherId)$('pitcherImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+pitch.pitcherId+'/headshot/67/current';
+    if(pitch.batterId)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+pitch.batterId+'/headshot/67/current';
+    const arrow=pitch.half==='top'?'\u25B2':'\u25BC';
+    $('inningBadge').textContent=arrow+' '+ordinal(pitch.inning);
+    renderCountDots(pitch.countBalls,pitch.countStrikes,pitch.countOuts);
+    renderBases(pitch.r1,pitch.r2,pitch.r3,{r1Name:pitch.r1Name,r2Name:pitch.r2Name,r3Name:pitch.r3Name});
+  }catch(e){
+    const bug='Pitch #'+debugSim.idx+': UI error — '+e.message;
+    debugSim.bugs.push(bug);debugLog('err','BUG: '+bug);
+  }
+
+  // Both bots make their picks
+  for(const bot of debugSim.bots){
+    const pick=aiPick(pitch.count,pitch.countOuts,pitch.r1||pitch.r2||pitch.r3);
+    bot.picks.push(pick);
+    bot.total++;
+
+    // Score the pick
+    let pts=scoreCall(pick,pitch.callCode,pitch.playResult,pitch.countBalls,pitch.countStrikes);
+    if(pts>0){
+      bot.correct++;bot.streak++;
+      if(bot.streak>=3)pts+=Math.floor((bot.streak-2)*pts*0.1);
+      bot.score+=pts;
+    }else{
+      bot.streak=0;
+    }
+
+    // Bug check: score should never be negative
+    if(bot.score<0){
+      const bug=bot.name+' has negative score ('+bot.score+') at pitch #'+debugSim.idx;
+      debugSim.bugs.push(bug);debugLog('err','BUG: '+bug);
+    }
+
+    // Bug check: scoreCall should return 0+ for valid picks
+    if(pts<0){
+      const bug='scoreCall returned negative ('+pts+') for pick='+pick+' cc='+pitch.callCode;
+      debugSim.bugs.push(bug);debugLog('err','BUG: '+bug);
+    }
+  }
+
+  // At-bat result check
+  if(pitch.isLastPitchOfAB&&pitch.abResult){
+    for(const bot of debugSim.bots){
+      const abPick=aiAbPick();
+      const abPts=abPick===pitch.abResult?(AB_SCORES[pitch.abResult]||30):0;
+      if(abPts>0)bot.score+=abPts;
+    }
+  }
+
+  // Draw the pitch on the strike zone
+  try{
+    drawPitch(pitch);updatePitchInfo(pitch);
+  }catch(e){
+    const bug='Pitch #'+debugSim.idx+': drawPitch error — '+e.message;
+    debugSim.bugs.push(bug);debugLog('err','BUG: '+bug);
+  }
+
+  // Log the pitch
+  const b0=debugSim.bots[0],b1=debugSim.bots[1];
+  const logType=debugSim.bugs.length>bugsBefore?'warn':'ok';
+  debugLog(logType,
+    '#'+debugSim.idx+' '+pitch.desc+' | '+
+    b0.name+': '+b0.picks[b0.picks.length-1]+' ('+b0.score+'pts) | '+
+    b1.name+': '+b1.picks[b1.picks.length-1]+' ('+b1.score+'pts)'+
+    (pitch.isLastPitchOfAB?' | AB: '+pitch.abResult:'')
+  );
+
+  // Update MP scoreboard with bot data
+  $('mpScoresList').innerHTML=[b0,b1].sort((a,b)=>b.score-a.score).map((bot,i)=>{
+    const medal=i===0?'\uD83E\uDD47 ':'\uD83E\uDD48 ';
+    const streak=bot.streak>=2?'\uD83D\uDD25'.repeat(Math.min(bot.streak,5)):'';
+    const acc=bot.total?Math.round(bot.correct/bot.total*100)+'%':'0%';
+    return`<div class="mp-row"><span class="mp-name">${medal}${bot.name} ${streak} <span style="font-size:9px;color:var(--muted)">${acc}</span></span><span class="mp-pts">${bot.score}</span></div>`;
+  }).join('');
+  $('yourScore').textContent=b0.score;$('cpuScore').textContent=b1.score;
+
+  // Update status bar
+  $('statusBar').textContent='\uD83D\uDD27 Pitch #'+debugSim.idx+'/'+debugSim.pitches.length+' — '+pitch.desc;
+  $('statusBar').className='status-bar';
+
+  updateDebugStats();
+
+  // Schedule next step
+  debugSim.timer=setTimeout(debugSimStep,debugSim.speed);
+}
+
+function debugSimPause(){debugSim.paused=true;if(debugSim.timer)clearTimeout(debugSim.timer);$('debugStatus').textContent='Paused at pitch #'+debugSim.idx}
+function debugSimResume(){debugSim.paused=false;$('debugStatus').textContent='Running...';debugSimStep()}
+function setDebugSpeed(btn){
+  document.querySelectorAll('.dbg-speed').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  debugSim.speed=parseInt(btn.dataset.ds);
+}
+function stopDebugSim(){
+  debugSim.active=false;if(debugSim.timer)clearTimeout(debugSim.timer);
+  debugSimFinish();
+}
+function debugSimFinish(){
+  debugSim.active=false;if(debugSim.timer){clearTimeout(debugSim.timer);debugSim.timer=null}
+  const elapsed=((Date.now()-debugSim.startTime)/1000).toFixed(1);
+  const b=debugSim.bots;
+  debugLog('info','=== SIMULATION COMPLETE ===');
+  debugLog('info',b[0].name+': '+b[0].score+'pts ('+b[0].correct+'/'+b[0].total+' = '+Math.round(b[0].correct/Math.max(b[0].total,1)*100)+'%)');
+  debugLog('info',b[1].name+': '+b[1].score+'pts ('+b[1].correct+'/'+b[1].total+' = '+Math.round(b[1].correct/Math.max(b[1].total,1)*100)+'%)');
+  debugLog(debugSim.bugs.length?'err':'ok',debugSim.bugs.length+' bugs found in '+elapsed+'s');
+  if(debugSim.bugs.length){
+    debugLog('err','--- BUG SUMMARY ---');
+    debugSim.bugs.forEach((b,i)=>debugLog('err',(i+1)+'. '+b));
+  }
+  $('debugStatus').textContent='Done — '+debugSim.bugs.length+' bugs, '+elapsed+'s';
+  updateDebugStats();
+}
 
 /* ══════════════════════════════════════
    LEAGUE SCORES COLLAPSE IN MP
