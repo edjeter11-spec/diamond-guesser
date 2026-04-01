@@ -665,6 +665,25 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
   .ds-hot-bar{flex:1;height:14px;background:var(--card2);border-radius:7px;overflow:hidden;position:relative}
   .ds-hot-fill{height:100%;border-radius:7px;transition:width .6s ease}
   .ds-hot-pct{font-family:'Courier New',monospace;font-weight:800;font-size:10px;min-width:32px;text-align:right}
+  /* Mini heatmap 3x3 */
+  .ds-heatmap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;width:100%;max-width:120px;margin:8px auto;aspect-ratio:3/3}
+  .ds-hz{border-radius:4px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);transition:all .4s;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:transparent;min-height:28px}
+  .ds-hz.hz-ball{background:rgba(74,222,128,0.25);border-color:rgba(74,222,128,0.4);color:#4ade80;box-shadow:0 0 8px rgba(74,222,128,0.2)}
+  .ds-hz.hz-strike{background:rgba(239,68,68,0.25);border-color:rgba(239,68,68,0.4);color:#fca5a5;box-shadow:0 0 8px rgba(239,68,68,0.2)}
+  .ds-hz.hz-foul{background:rgba(251,191,36,0.25);border-color:rgba(251,191,36,0.4);color:#fbbf24;box-shadow:0 0 8px rgba(251,191,36,0.2)}
+  .ds-hz.hz-play{background:rgba(99,102,241,0.3);border-color:rgba(99,102,241,0.5);color:#a5b4fc;box-shadow:0 0 10px rgba(99,102,241,0.3)}
+  /* Inning vote */
+  .ds-vote-row{display:flex;gap:4px}
+  .ds-vote-btn{flex:1;border:none;border-radius:8px;padding:8px 4px;font-size:10px;font-weight:800;font-family:var(--font-head);cursor:pointer;transition:all .15s;text-align:center;letter-spacing:0.3px}
+  .ds-vote-btn:hover{transform:translateY(-1px)}
+  .ds-vote-btn:active{transform:scale(0.96)}
+  .ds-vote-btn.v-k{background:linear-gradient(135deg,#7f1d1d,#991b1b);color:#fca5a5}
+  .ds-vote-btn.v-bb{background:linear-gradient(135deg,#166534,#15803d);color:#4ade80}
+  .ds-vote-btn.v-h{background:linear-gradient(135deg,#4c1d95,#5b21b6);color:#c4b5fd}
+  .ds-vote-btn.v-sel{outline:2px solid var(--accent);box-shadow:0 0 10px rgba(245,158,11,0.3)}
+  .ds-vote-result{text-align:center;font-size:10px;color:var(--muted);padding:4px 0;min-height:18px}
+  .ds-vote-bar{display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:4px;background:var(--card2)}
+  .ds-vote-seg{height:100%;transition:width .4s ease}
   /* Screen overrides for desktop */
   .screen{max-width:none;margin:0}
 }
@@ -684,12 +703,23 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
     </div>
     <div class="ds-divider"></div>
     <!-- Last Pitch Component -->
-    <div id="dsLastPitch" style="text-align:center;padding:6px 0">
-      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:4px">Last Pitch</div>
-      <div id="dsLastPitchType" style="font-family:var(--font-head);font-size:16px;font-weight:800;color:var(--text)">--</div>
-      <div style="display:flex;justify-content:center;gap:12px;margin-top:4px">
-        <span id="dsLastPitchSpeed" style="font-family:'Courier New',monospace;font-size:14px;font-weight:800;color:#4ade80">-- mph</span>
-        <span id="dsLastPitchResult" style="font-size:12px;font-weight:700;color:var(--muted)">--</span>
+    <div id="dsLastPitch" style="text-align:center;padding:8px 0">
+      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:6px">Last Pitch</div>
+      <div id="dsLastPitchType" style="font-family:var(--font-head);font-size:20px;font-weight:800;color:var(--text);text-shadow:0 0 12px rgba(255,255,255,0.15)">--</div>
+      <div style="display:flex;justify-content:center;gap:14px;margin-top:6px;align-items:baseline">
+        <span id="dsLastPitchSpeed" style="font-family:var(--font-head);font-size:22px;font-weight:800;color:#4ade80;text-shadow:0 0 16px rgba(74,222,128,0.4)">--</span>
+        <span style="font-size:10px;color:var(--muted);font-weight:600">mph</span>
+        <span id="dsLastPitchResult" style="font-size:13px;font-weight:800;color:var(--muted)">--</span>
+      </div>
+    </div>
+    <div class="ds-divider"></div>
+    <!-- Mini Strike Zone Heatmap -->
+    <div style="text-align:center">
+      <div style="font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:4px">Strike Zone</div>
+      <div class="ds-heatmap" id="dsHeatmap">
+        <div class="ds-hz" data-zone="0"></div><div class="ds-hz" data-zone="1"></div><div class="ds-hz" data-zone="2"></div>
+        <div class="ds-hz" data-zone="3"></div><div class="ds-hz" data-zone="4"></div><div class="ds-hz" data-zone="5"></div>
+        <div class="ds-hz" data-zone="6"></div><div class="ds-hz" data-zone="7"></div><div class="ds-hz" data-zone="8"></div>
       </div>
     </div>
   </div>
@@ -1138,6 +1168,21 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
   <div class="ds-card">
     <h4><span class="ds-live-dot"></span> Social Pulse</h4>
     <div id="dsActivity" style="max-height:240px;overflow-y:auto"></div>
+  </div>
+  <div class="ds-card">
+    <h4>&#127919; Inning Vote</h4>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-align:center">Predict this at-bat outcome</div>
+    <div class="ds-vote-row">
+      <button class="ds-vote-btn v-k" onclick="castVote('K')">&#128165; K</button>
+      <button class="ds-vote-btn v-bb" onclick="castVote('BB')">&#128694; BB</button>
+      <button class="ds-vote-btn v-h" onclick="castVote('H')">&#128293; Hit</button>
+    </div>
+    <div class="ds-vote-bar" id="dsVoteBar">
+      <div class="ds-vote-seg" id="dsVoteK" style="width:33%;background:#991b1b"></div>
+      <div class="ds-vote-seg" id="dsVoteBB" style="width:33%;background:#15803d"></div>
+      <div class="ds-vote-seg" id="dsVoteH" style="width:34%;background:#5b21b6"></div>
+    </div>
+    <div class="ds-vote-result" id="dsVoteResult">Cast your vote!</div>
   </div>
   <div class="ds-card">
     <h4>&#9889; Quick Play</h4>
@@ -4987,17 +5032,83 @@ function triggerTrendsGlow(){
   setTimeout(()=>card.classList.remove('ds-glow'),600);
 }
 
-// Update Last Pitch display
+// Update Last Pitch display + heatmap
 function updateLastPitch(p){
   if(window.innerWidth<1024||!p)return;
   $('dsLastPitchType').textContent=p.typeDesc||p.desc||'--';
-  $('dsLastPitchSpeed').textContent=p.speed?Math.round(p.speed)+' mph':'-- mph';
+  $('dsLastPitchSpeed').textContent=p.speed?Math.round(p.speed):'--';
   const resultMap={B:'Ball',C:'Strike',S:'Strike',T:'Strike',F:'Foul',X:'Out',D:'In Play',E:'Run!'};
   const resultColors={B:'#4ade80',C:'#ef4444',S:'#ef4444',T:'#ef4444',F:'#fbbf24',X:'#3b82f6',D:'#a78bfa',E:'#f472b6'};
   $('dsLastPitchResult').textContent=resultMap[p.callCode]||'--';
   $('dsLastPitchResult').style.color=resultColors[p.callCode]||'var(--muted)';
   lastSidebarPitchType=p.typeDesc||'';
+  // Glow the speed based on velocity
+  const spd=$('dsLastPitchSpeed');
+  if(p.speed>=95)spd.style.color='#ef4444';// Heat
+  else if(p.speed>=90)spd.style.color='#f59e0b';
+  else if(p.speed>=80)spd.style.color='#4ade80';
+  else spd.style.color='#60a5fa';// Slow = blue
+
+  // Update mini heatmap
+  updateHeatmap(p);
 }
+
+function updateHeatmap(p){
+  // Map pX (-2 to 2) and pZ (1 to 4) to a 3x3 grid
+  const zones=document.querySelectorAll('.ds-hz');
+  zones.forEach(z=>{z.className='ds-hz';z.textContent=''});
+  if(p.pX==null||p.pZ==null||(p.pX===0&&p.pZ===0))return;
+  // Column: pX < -0.5 = left(0), -0.5 to 0.5 = center(1), >0.5 = right(2)
+  const col=p.pX<-0.5?0:p.pX>0.5?2:1;
+  // Row: pZ > 3.0 = top(0), 2.0-3.0 = middle(1), <2.0 = bottom(2)
+  const szMid=(p.szTop||3.5+p.szBot||1.5)/2;
+  const szRange=(p.szTop||3.5)-(p.szBot||1.5);
+  const third=szRange/3;
+  const row=p.pZ>(p.szBot||1.5)+2*third?0:p.pZ>(p.szBot||1.5)+third?1:2;
+  const idx=row*3+col;
+  const zone=zones[idx];
+  if(!zone)return;
+  // Color based on call
+  const cc=p.callCode;
+  const clsMap={B:'hz-ball',C:'hz-strike',S:'hz-strike',T:'hz-strike',F:'hz-foul',X:'hz-play',D:'hz-play',E:'hz-play'};
+  const lblMap={B:'B',C:'K',S:'K',T:'K',F:'F',X:'X',D:'\u25CF',E:'\u2605'};
+  zone.classList.add(clsMap[cc]||'hz-strike');
+  zone.textContent=lblMap[cc]||'\u25CF';
+}
+
+// ── Inning Vote System ──
+let dsVotes={K:1,BB:1,H:1};// Start with 1 each to avoid 0-division
+let dsMyVote='';
+function castVote(choice){
+  document.querySelectorAll('.ds-vote-btn').forEach(b=>b.classList.remove('v-sel'));
+  if(dsMyVote===choice){dsMyVote='';$('dsVoteResult').textContent='Vote cleared';return}
+  if(dsMyVote)dsVotes[dsMyVote]--;// Remove old vote
+  dsMyVote=choice;
+  dsVotes[choice]++;
+  document.querySelector('.ds-vote-btn.v-'+choice.toLowerCase()).classList.add('v-sel');
+  const total=dsVotes.K+dsVotes.BB+dsVotes.H;
+  $('dsVoteK').style.width=Math.round(dsVotes.K/total*100)+'%';
+  $('dsVoteBB').style.width=Math.round(dsVotes.BB/total*100)+'%';
+  $('dsVoteH').style.width=Math.round(dsVotes.H/total*100)+'%';
+  const pctMap={K:Math.round(dsVotes.K/total*100),BB:Math.round(dsVotes.BB/total*100),H:Math.round(dsVotes.H/total*100)};
+  $('dsVoteResult').textContent='K '+pctMap.K+'% \u2022 BB '+pctMap.BB+'% \u2022 Hit '+pctMap.H+'%';
+  addSocialPulse('\uD83D\uDDF3','<span class="ds-pulse-user">'+S.playerName+'</span> voted '+choice,'');
+}
+// Simulate other "users" voting to make it feel alive
+function simulateVotes(){
+  if(window.innerWidth<1024||!S.gameActive)return;
+  const names=['SluggerFan','AceHunter','DiamondEye','PitchPro','BBGenius','HRKing'];
+  const choices=['K','BB','H'];
+  const name=names[Math.floor(Math.random()*names.length)];
+  const choice=choices[Math.floor(Math.random()*choices.length)];
+  dsVotes[choice]++;
+  const total=dsVotes.K+dsVotes.BB+dsVotes.H;
+  $('dsVoteK').style.width=Math.round(dsVotes.K/total*100)+'%';
+  $('dsVoteBB').style.width=Math.round(dsVotes.BB/total*100)+'%';
+  $('dsVoteH').style.width=Math.round(dsVotes.H/total*100)+'%';
+  if(Math.random()<0.3)addSocialPulse('\uD83D\uDDF3','<span class="ds-pulse-user">'+name+'</span> voted '+choice,'');
+}
+setInterval(simulateVotes,8000);
 
 function updateDesktopSidebars(){
   if(window.innerWidth<1024)return;
