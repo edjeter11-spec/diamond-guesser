@@ -621,7 +621,8 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
 .modal-cancel{background:var(--card2);color:var(--muted)}
 
 /* ── Top Auth Bar ── */
-.top-auth-bar{display:flex;align-items:center;justify-content:flex-end;padding:6px 12px;gap:8px;max-width:1280px;margin:0 auto;width:100%}
+.top-auth-bar{display:flex;align-items:center;justify-content:center;padding:4px 8px;gap:6px;max-width:500px;margin:0 auto;width:100%;position:sticky;top:0;z-index:100;background:var(--bg)}
+@media(min-width:1024px){.top-auth-bar{max-width:1280px;justify-content:flex-end;padding:6px 20px}}
 .tab-user{display:flex;align-items:center;gap:8px;font-size:12px}
 .tab-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#000;flex-shrink:0;border:2px solid rgba(245,158,11,0.3)}
 .tab-name{font-weight:700;color:var(--text);max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -705,6 +706,9 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
   .ds-vote-seg{height:100%;transition:width .4s ease}
   /* Screen overrides for desktop */
   .screen{max-width:none;margin:0}
+  /* Hide sidebars on auth/login screen — center the login */
+  .desktop-wrapper:has(#screenAuth.active) .desktop-sidebar{display:none}
+  .desktop-wrapper:has(#screenAuth.active) .desktop-main{max-width:500px;margin:0 auto}
 }
 </style>
 </head>
@@ -803,7 +807,10 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
     <button class="auth-btn primary" id="authSignupBtn">Create Account</button>
     <div class="auth-toggle">Already have an account? <a id="authShowLogin">Log In</a></div>
   </div>
-  <button class="auth-btn ghost" id="authGuestBtn">Continue as Guest</button>
+  <div style="display:flex;gap:6px;align-items:center">
+    <input class="auth-input" id="guestNameInput" type="text" placeholder="Enter your name..." maxlength="20" autocomplete="name" style="margin:0;flex:1">
+    <button class="auth-btn ghost" id="authGuestBtn" style="width:auto;flex-shrink:0;margin:0;padding:14px 16px">Play</button>
+  </div>
 </div>
 
 <!-- HOME -->
@@ -1309,12 +1316,21 @@ $('authLoginBtn').addEventListener('click',async()=>{
   catch(e){$('authError').textContent=e.message;$('authLoginBtn').textContent='Log In'}
 });
 
-// Guest
+// Guest — must enter name first
 $('authGuestBtn').addEventListener('click',async()=>{
-  $('authGuestBtn').textContent='Connecting...';
-  try{await auth.signInAnonymously()}
-  catch(e){$('authGuestBtn').textContent='Continue as Guest';alert('Error: '+e.message)}
+  const name=$('guestNameInput').value.trim();
+  if(!name){$('guestNameInput').style.borderColor='var(--red)';$('guestNameInput').placeholder='Please enter a name!';$('guestNameInput').focus();return}
+  $('guestNameInput').style.borderColor='';
+  $('authGuestBtn').textContent='...';
+  try{
+    const cred=await auth.signInAnonymously();
+    await cred.user.updateProfile({displayName:name});
+    await db.ref('users/'+cred.user.uid).update({name:name});
+    S.playerName=name;localStorage.setItem('dg_name',name);
+  }catch(e){$('authGuestBtn').textContent='Play';alert('Error: '+e.message)}
 });
+// Enter key on guest name input
+$('guestNameInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('authGuestBtn').click()}});
 
 // Logout
 $('logoutBtn').addEventListener('click',()=>{auth.signOut()});
