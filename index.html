@@ -962,6 +962,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
       <span>&#9889; LIVE Stress Test</span>
       <span style="display:flex;gap:4px;align-items:center">
         <button onclick="manualBugReport()" style="border:none;border-radius:4px;padding:3px 8px;font-size:9px;font-weight:700;cursor:pointer;background:#991b1b;color:#fca5a5">&#128027; Report Bug</button>
+        <button onclick="copyStressLog()" style="border:none;border-radius:4px;padding:3px 8px;font-size:9px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--muted)">&#128203; Copy Log</button>
         <span id="stressStatus" style="font-size:9px;font-weight:400;color:var(--muted)"></span>
       </span>
     </h4>
@@ -4578,6 +4579,21 @@ function checkStressUrlParams(){
   },1000);
 
   return true;
+}
+
+// Copy full stress log to clipboard
+function copyStressLog(){
+  const log=$('stressLog');
+  const text=Array.from(log.children).map(el=>el.textContent).join('\n');
+  const stats='Pitches: '+stressTest.pitchesProcessed+' | Sync: '+stressTest.syncErrors+' | Double: '+stressTest.doubleHits+' | Skipped: '+stressTest.skippedPitches+' | Spoiler: '+stressTest.spoilerLeaks+' | Score: '+stressTest.scoreMismatches+' | Total Bugs: '+stressTest.errors.length;
+  navigator.clipboard.writeText('=== STRESS TEST REPORT ===\n'+stats+'\n\n'+text).then(()=>{
+    stressLog('info','Log copied to clipboard! Paste it to share.');
+  }).catch(()=>{
+    // Fallback: select + copy
+    const ta=document.createElement('textarea');ta.value='=== STRESS TEST REPORT ===\n'+stats+'\n\n'+text;
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    stressLog('info','Log copied to clipboard!');
+  });
 }
 
 // Manual bug report — you see a glitch the data can't detect
