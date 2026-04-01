@@ -706,7 +706,9 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
   .ds-vote-seg{height:100%;transition:width .4s ease}
   /* Screen overrides for desktop */
   .screen{max-width:none;margin:0}
-  /* Hide sidebars on auth/login screen — center the login */
+}
+/* Hide sidebars on auth — separate rule so :has() failure doesn't break the media query */
+@media(min-width:1024px){
   .desktop-wrapper:has(#screenAuth.active) .desktop-sidebar{display:none}
   .desktop-wrapper:has(#screenAuth.active) .desktop-main{max-width:500px;margin:0 auto}
 }
@@ -1493,11 +1495,11 @@ function makeGameCard(g,cls,pickMode){
     if(pickMode){
       if(S.isHost&&roomRef)roomRef.child('game').set({gameId:g.gamePk,away:aw.team.name,home:hm.team.name,awayId:awId,homeId:hmId});
       startGame(g.gamePk,aw.team.name,hm.team.name,awId,hmId);
-    }else if(soloModeActive){
-      // Solo mode active — start immediately, no second modal
+    }else{
+      // Default: start solo immediately — no extra modal needed
       S.isMultiplayer=false;S.isHost=false;soloModeActive=false;
       startGame(g.gamePk,aw.team.name,hm.team.name,awId,hmId);
-    }else{showModeModal(g.gamePk,aw.team.name,hm.team.name,awId,hmId)}
+    }
   });
   return card;
 }
@@ -1527,18 +1529,19 @@ $('btnSoloMode').addEventListener('click',()=>{$('soloModal').classList.add('sho
 $('soloLive').addEventListener('click',()=>{
   $('soloModal').classList.remove('show');S.isMultiplayer=false;S.isHost=false;
   soloModeActive=true;
-  // If there are live games, start the first one immediately
+  // If there are games, start the best one immediately
   if(cachedGames&&cachedGames.length){
     const live=cachedGames.find(g=>g.status.abstractGameState==='Live');
-    const game=live||cachedGames[0];
+    const game=live||cachedGames.find(g=>g.status.abstractGameState!=='Preview')||cachedGames[0];
     if(game){
       const aw=game.teams.away,hm=game.teams.home;
       startGame(game.gamePk,aw.team.name,hm.team.name,aw.team.id||0,hm.team.id||0);
       return;
     }
   }
-  // No games loaded yet — scroll to list, cards will auto-start in solo mode
-  document.querySelector('.game-list').scrollIntoView({behavior:'smooth'});
+  // No games available — fall back to simulation mode
+  soloModeActive=false;
+  startPractice(false);
 });
 $('soloSim').addEventListener('click',()=>{
   $('soloModal').classList.remove('show');S.isMultiplayer=false;S.isHost=false;
