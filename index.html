@@ -620,26 +620,6 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
 .modal-btns button:active{transform:scale(0.96)}
 .modal-cancel{background:var(--card2);color:var(--muted)}
 
-/* ── Top Auth Bar ── */
-.top-auth-bar{display:flex;align-items:center;justify-content:center;padding:4px 8px;gap:6px;max-width:500px;margin:0 auto;width:100%;position:sticky;top:0;z-index:100;background:var(--bg)}
-@media(min-width:1024px){.top-auth-bar{max-width:1280px;justify-content:flex-end;padding:6px 20px}}
-.tab-user{display:flex;align-items:center;gap:8px;font-size:12px}
-.tab-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#000;flex-shrink:0;border:2px solid rgba(245,158,11,0.3)}
-.tab-name{font-weight:700;color:var(--text);max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tab-pts{font-family:'Courier New',monospace;font-weight:800;color:var(--accent);font-size:11px}
-.tab-btn{border:none;border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;cursor:pointer;transition:all .15s}
-.tab-btn:hover{transform:translateY(-1px)}
-.tab-btn.tb-login{background:var(--accent);color:#000}
-.tab-btn.tb-signup{background:var(--card2);color:var(--text);border:1px solid var(--glass-border)}
-.tab-btn.tb-logout{background:transparent;color:var(--muted);font-size:9px}
-.tab-btn.tb-google{background:#fff;color:#333;display:flex;align-items:center;gap:4px;font-weight:700}
-.tab-btn.tb-google:hover{background:#f1f1f1}
-.tab-level{font-size:8px;font-weight:800;padding:1px 5px;border-radius:3px;text-transform:uppercase;letter-spacing:0.5px}
-.tab-level.rookie{background:rgba(100,116,139,0.2);color:var(--muted)}
-.tab-level.pro{background:rgba(59,130,246,0.2);color:#60a5fa}
-.tab-level.allstar{background:rgba(245,158,11,0.2);color:var(--accent)}
-.tab-level.mvp{background:rgba(239,68,68,0.2);color:#f87171}
-
 /* ══════════════════════════════════════
    DESKTOP THREE-COLUMN LAYOUT (>1024px)
    ══════════════════════════════════════ */
@@ -707,32 +687,9 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
   /* Screen overrides for desktop */
   .screen{max-width:none;margin:0}
 }
-/* Hide sidebars on auth — separate rule so :has() failure doesn't break the media query */
-@media(min-width:1024px){
-  .desktop-wrapper:has(#screenAuth.active) .desktop-sidebar{display:none}
-  .desktop-wrapper:has(#screenAuth.active) .desktop-main{max-width:500px;margin:0 auto}
-}
 </style>
 </head>
 <body>
-<!-- Top Auth Bar (always visible) -->
-<div class="top-auth-bar" id="topAuthBar">
-  <!-- Logged out state -->
-  <div id="tabLoggedOut" style="display:flex;gap:6px;align-items:center">
-    <button class="tab-btn tb-google" onclick="googleSignIn()"><svg width="14" height="14" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> Google</button>
-    <button class="tab-btn tb-login" onclick="showQuickLogin()">Sign In</button>
-    <button class="tab-btn tb-signup" onclick="showQuickSignup()">Sign Up</button>
-  </div>
-  <!-- Logged in state -->
-  <div id="tabLoggedIn" style="display:none;gap:8px;align-items:center">
-    <div class="tab-avatar" id="tabAvatar">?</div>
-    <div>
-      <div class="tab-name" id="tabName">Player</div>
-      <div style="display:flex;gap:4px;align-items:center"><span class="tab-pts" id="tabPts">0 pts</span><span class="tab-level rookie" id="tabLevel">Rookie</span></div>
-    </div>
-    <button class="tab-btn tb-logout" onclick="auth.signOut()">Log Out</button>
-  </div>
-</div>
 <div class="desktop-wrapper">
 
 <!-- LEFT SIDEBAR (desktop only) -->
@@ -809,10 +766,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
     <button class="auth-btn primary" id="authSignupBtn">Create Account</button>
     <div class="auth-toggle">Already have an account? <a id="authShowLogin">Log In</a></div>
   </div>
-  <div style="display:flex;gap:6px;align-items:center">
-    <input class="auth-input" id="guestNameInput" type="text" placeholder="Enter your name..." maxlength="20" autocomplete="name" style="margin:0;flex:1">
-    <button class="auth-btn ghost" id="authGuestBtn" style="width:auto;flex-shrink:0;margin:0;padding:14px 16px">Play</button>
-  </div>
+  <button class="auth-btn ghost" id="authGuestBtn">Continue as Guest</button>
 </div>
 
 <!-- HOME -->
@@ -1318,57 +1272,15 @@ $('authLoginBtn').addEventListener('click',async()=>{
   catch(e){$('authError').textContent=e.message;$('authLoginBtn').textContent='Log In'}
 });
 
-// Guest — must enter name first
+// Guest
 $('authGuestBtn').addEventListener('click',async()=>{
-  const name=$('guestNameInput').value.trim();
-  if(!name){$('guestNameInput').style.borderColor='var(--red)';$('guestNameInput').placeholder='Please enter a name!';$('guestNameInput').focus();return}
-  $('guestNameInput').style.borderColor='';
-  $('authGuestBtn').textContent='...';
-  try{
-    const cred=await auth.signInAnonymously();
-    await cred.user.updateProfile({displayName:name});
-    await db.ref('users/'+cred.user.uid).update({name:name});
-    S.playerName=name;localStorage.setItem('dg_name',name);
-  }catch(e){$('authGuestBtn').textContent='Play';alert('Error: '+e.message)}
+  $('authGuestBtn').textContent='Connecting...';
+  try{await auth.signInAnonymously()}
+  catch(e){$('authGuestBtn').textContent='Continue as Guest';alert('Error: '+e.message)}
 });
-// Enter key on guest name input
-$('guestNameInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('authGuestBtn').click()}});
 
 // Logout
 $('logoutBtn').addEventListener('click',()=>{auth.signOut()});
-
-// Google Sign-In
-const googleProvider=new firebase.auth.GoogleAuthProvider();
-function googleSignIn(){auth.signInWithPopup(googleProvider).catch(e=>console.warn('Google sign-in:',e.message))}
-
-// Quick login/signup from top bar (reuses existing auth screen fields)
-function showQuickLogin(){showScreen('screenAuth');$('authLoginCard').style.display='';$('authSignupCard').style.display='none'}
-function showQuickSignup(){showScreen('screenAuth');$('authSignupCard').style.display='';$('authLoginCard').style.display='none'}
-
-// User level based on total points
-function getUserLevel(pts){
-  if(pts>=10000)return{name:'MVP',cls:'mvp'};
-  if(pts>=5000)return{name:'All-Star',cls:'allstar'};
-  if(pts>=1000)return{name:'Pro',cls:'pro'};
-  return{name:'Rookie',cls:'rookie'};
-}
-
-// Update top auth bar
-function updateTopAuthBar(user,balance){
-  if(user){
-    $('tabLoggedOut').style.display='none';
-    $('tabLoggedIn').style.display='flex';
-    const name=user.displayName||(user.isAnonymous?'Guest':'Player');
-    $('tabAvatar').textContent=name.charAt(0).toUpperCase();
-    $('tabName').textContent=name;
-    $('tabPts').textContent=(balance||0).toLocaleString()+' pts';
-    const lvl=getUserLevel(balance||0);
-    $('tabLevel').textContent=lvl.name;$('tabLevel').className='tab-level '+lvl.cls;
-  }else{
-    $('tabLoggedOut').style.display='flex';
-    $('tabLoggedIn').style.display='none';
-  }
-}
 
 // Auth state listener
 auth.onAuthStateChanged(async(user)=>{
@@ -1378,24 +1290,16 @@ auth.onAuthStateChanged(async(user)=>{
     S.playerName=user.displayName||(isGuest?'Guest':'Player');
     S.playerId=user.uid;
     localStorage.setItem('dg_name',S.playerName);
-    // Load ALL user data from Firebase
+    // Load balance from Firebase
     const snap=await db.ref('users/'+user.uid).once('value');
     const data=snap.val();
-    if(data){
-      userBalance=data.balance||0;
-      S.bestStreak=data.bestStreak||0;
-      S.correctCount=data.totalCorrect||0;
-      S.totalPredictions=data.totalPredictions||0;
-    }else{
-      await db.ref('users/'+user.uid).set({name:S.playerName,balance:0,gamesPlayed:0,bestStreak:0,totalCorrect:0,totalPredictions:0,accuracy:0,created:Date.now()});
-      userBalance=0;
-    }
-    // Update all UI
+    if(data){userBalance=data.balance||0}
+    else{await db.ref('users/'+user.uid).set({name:S.playerName,balance:0,gamesPlayed:0,bestStreak:0,created:Date.now()});userBalance=0}
+    // Update home screen
     $('balName').textContent=S.playerName+(isGuest?' (Guest)':'');
     $('balVal').textContent=userBalance.toLocaleString();
     $('logoutBtn').style.display=isGuest?'none':'';
     $('homeBalance').style.display='';
-    updateTopAuthBar(user,userBalance);
     // Check if launched as stress test iframe
     if(checkStressUrlParams()){renderHomeLB();loadGames();return}
     // Try to rejoin an active multiplayer room (page reload)
@@ -1404,7 +1308,6 @@ auth.onAuthStateChanged(async(user)=>{
     else{renderHomeLB();loadGames()}
   }else{
     currentUser=null;userBalance=0;
-    updateTopAuthBar(null,0);
     showScreen('screenAuth');
     $('authLoginBtn').textContent='Log In';$('authSignupBtn').textContent='Create Account';$('authGuestBtn').textContent='Continue as Guest';
   }
@@ -1416,22 +1319,14 @@ function saveUserBalance(pointsEarned){
   userBalance+=pointsEarned;
   db.ref('users/'+currentUser.uid).update({balance:userBalance,lastPlayed:Date.now()});
   $('balVal').textContent=userBalance.toLocaleString();
-  $('tabPts').textContent=userBalance.toLocaleString()+' pts';
-  const lvl=getUserLevel(userBalance);
-  $('tabLevel').textContent=lvl.name;$('tabLevel').className='tab-level '+lvl.cls;
 }
 function saveUserStats(){
   if(!currentUser)return;
-  const acc=S.totalPredictions>0?Math.round(S.correctCount/S.totalPredictions*100):0;
   db.ref('users/'+currentUser.uid).update({
     gamesPlayed:firebase.database.ServerValue.increment(1),
     bestStreak:Math.max(S.bestStreak,0),
-    totalCorrect:S.correctCount||0,
-    totalPredictions:S.totalPredictions||0,
-    accuracy:acc,
     lastPlayed:Date.now()
   });
-  updateTopAuthBar(currentUser,userBalance);
 }
 
 /* ══════════════════════════════════════
@@ -1495,16 +1390,12 @@ function makeGameCard(g,cls,pickMode){
     if(pickMode){
       if(S.isHost&&roomRef)roomRef.child('game').set({gameId:g.gamePk,away:aw.team.name,home:hm.team.name,awayId:awId,homeId:hmId});
       startGame(g.gamePk,aw.team.name,hm.team.name,awId,hmId);
-    }else{
-      // Default: start solo immediately — no extra modal needed
-      S.isMultiplayer=false;S.isHost=false;soloModeActive=false;
-      startGame(g.gamePk,aw.team.name,hm.team.name,awId,hmId);
-    }
+    }else{showModeModal(g.gamePk,aw.team.name,hm.team.name,awId,hmId)}
   });
   return card;
 }
 $('refreshGames').addEventListener('click',()=>loadGames());
-$('backBtn').addEventListener('click',()=>{stopGame();soloModeActive=false;showScreen(S.isMultiplayer?'screenLobby':'screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString()});
+$('backBtn').addEventListener('click',()=>{stopGame();showScreen(S.isMultiplayer?'screenLobby':'screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString()});
 
 /* ══════ GAME MODE MODAL ══════ */
 let pendingGame=null;
@@ -1524,24 +1415,11 @@ $('modalFriends').addEventListener('click',()=>{
 $('modalCancel').addEventListener('click',()=>{$('modeModal').classList.remove('show')});
 
 /* HOME MODE */
-let soloModeActive=false;// When true, clicking a game card starts solo immediately
 $('btnSoloMode').addEventListener('click',()=>{$('soloModal').classList.add('show')});
 $('soloLive').addEventListener('click',()=>{
   $('soloModal').classList.remove('show');S.isMultiplayer=false;S.isHost=false;
-  soloModeActive=true;
-  // If there are games, start the best one immediately
-  if(cachedGames&&cachedGames.length){
-    const live=cachedGames.find(g=>g.status.abstractGameState==='Live');
-    const game=live||cachedGames.find(g=>g.status.abstractGameState!=='Preview')||cachedGames[0];
-    if(game){
-      const aw=game.teams.away,hm=game.teams.home;
-      startGame(game.gamePk,aw.team.name,hm.team.name,aw.team.id||0,hm.team.id||0);
-      return;
-    }
-  }
-  // No games available — fall back to simulation mode
-  soloModeActive=false;
-  startPractice(false);
+  // Scroll to game list
+  document.querySelector('.game-list').scrollIntoView({behavior:'smooth'});
 });
 $('soloSim').addEventListener('click',()=>{
   $('soloModal').classList.remove('show');S.isMultiplayer=false;S.isHost=false;
@@ -3778,18 +3656,14 @@ async function startPractice(isMP){
   const btn=isMP?$('btnMPPractice'):$('soloSim');
   btn.textContent='Loading game...';
   try{
-    // Search last 7 days for a completed game (handles off-days and offseason)
-    let final=[];let ds='';
-    for(let daysBack=1;daysBack<=7;daysBack++){
-      const d=new Date();d.setDate(d.getDate()-daysBack);
-      ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      const r=await fetch('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+ds+'&hydrate=linescore');
-      const sched=await r.json();
-      const games=(sched.dates&&sched.dates[0]&&sched.dates[0].games)||[];
-      final=games.filter(g=>g.status.abstractGameState==='Final');
-      if(final.length)break;
-    }
-    if(!final.length){btn.textContent='No completed games found (checked last 7 days)';setTimeout(()=>{btn.textContent=isMP?'\uD83C\uDFAC Practice Together':'\uD83C\uDFAC Play Simulation'},3000);return}
+    // Find yesterday's games to get a completed one
+    const d=new Date();d.setDate(d.getDate()-1);
+    const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const r=await fetch('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+ds+'&hydrate=linescore');
+    const sched=await r.json();
+    const games=(sched.dates&&sched.dates[0]&&sched.dates[0].games)||[];
+    const final=games.filter(g=>g.status.abstractGameState==='Final');
+    if(!final.length){btn.textContent='No completed games found';return}
     // Pick a random completed game
     const game=final[Math.floor(Math.random()*final.length)];
     const gamePk=game.gamePk;
@@ -4368,18 +4242,14 @@ function aiAbPick(){
 async function startDebugSim(){
   $('btnDebugSim').textContent='Loading game data...';
   try{
-    // Search last 7 days for finished games
-    let final=[];
-    for(let daysBack=1;daysBack<=7;daysBack++){
-      const d=new Date();d.setDate(d.getDate()-daysBack);
-      const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      const r=await fetch('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+ds+'&hydrate=linescore');
-      const sched=await r.json();
-      const games=(sched.dates&&sched.dates[0]&&sched.dates[0].games)||[];
-      final=games.filter(g=>g.status.abstractGameState==='Final');
-      if(final.length)break;
-    }
-    if(!final.length){$('btnDebugSim').textContent='No completed games (7 days)';setTimeout(()=>{$('btnDebugSim').textContent='\uD83D\uDD27 Debug Sim (2 AI Players)'},3000);return}
+    // Get yesterday's finished games
+    const d=new Date();d.setDate(d.getDate()-1);
+    const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const r=await fetch('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+ds+'&hydrate=linescore');
+    const sched=await r.json();
+    const games=(sched.dates&&sched.dates[0]&&sched.dates[0].games)||[];
+    const final=games.filter(g=>g.status.abstractGameState==='Final');
+    if(!final.length){$('btnDebugSim').textContent='No completed games found';setTimeout(()=>{$('btnDebugSim').textContent='\uD83D\uDD27 Debug Sim (2 AI Players)'},3000);return}
 
     const game=final[Math.floor(Math.random()*final.length)];
     const r2=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+game.gamePk+'/feed/live');
