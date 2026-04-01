@@ -619,9 +619,67 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
 .modal-btns button{border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;transition:transform .1s}
 .modal-btns button:active{transform:scale(0.96)}
 .modal-cancel{background:var(--card2);color:var(--muted)}
+
+/* ══════════════════════════════════════
+   DESKTOP THREE-COLUMN LAYOUT (>1024px)
+   ══════════════════════════════════════ */
+.desktop-wrapper{display:contents}
+.desktop-sidebar{display:none}
+
+@media(min-width:1024px){
+  body{padding:0;display:flex;justify-content:center;min-height:100vh}
+  .desktop-wrapper{display:flex;gap:20px;width:100%;max-width:1280px;padding:16px 20px;align-items:flex-start}
+  .desktop-sidebar{display:flex;flex-direction:column;gap:10px;width:280px;flex-shrink:0;position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto}
+  .desktop-sidebar::-webkit-scrollbar{width:3px}.desktop-sidebar::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+  .desktop-main{flex:1;max-width:520px;min-width:0}
+  /* Sidebar cards */
+  .ds-card{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:var(--radius);padding:14px;border:1px solid var(--glass-border);box-shadow:0 2px 8px rgba(0,0,0,0.2)}
+  .ds-card h4{font-family:var(--font-head);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:8px}
+  .ds-stat-row{display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid rgba(255,255,255,0.03)}
+  .ds-stat-row:last-child{border:none}
+  .ds-stat-row .ds-label{color:var(--muted)}.ds-stat-row .ds-val{font-family:'Courier New',monospace;font-weight:800;color:var(--text)}
+  .ds-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent);margin:4px 0}
+  .ds-activity-item{padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03);font-size:11px;line-height:1.4}
+  .ds-activity-item:last-child{border:none}
+  .ds-activity-item .ds-time{color:var(--muted);font-size:9px}
+  .ds-activity-item .ds-user{color:var(--accent);font-weight:700}
+  .ds-empty{color:var(--muted);font-size:11px;text-align:center;padding:12px 0}
+  /* Screen overrides for desktop */
+  .screen{max-width:none;margin:0}
+}
 </style>
 </head>
 <body>
+<div class="desktop-wrapper">
+
+<!-- LEFT SIDEBAR (desktop only) -->
+<aside class="desktop-sidebar" id="sidebarLeft">
+  <div class="ds-card">
+    <h4>&#9918; Live Stats</h4>
+    <div id="dsLiveStats">
+      <div class="ds-stat-row"><span class="ds-label">Games Today</span><span class="ds-val" id="dsGamesToday">--</span></div>
+      <div class="ds-stat-row"><span class="ds-label">Live Now</span><span class="ds-val" id="dsLiveNow">--</span></div>
+      <div class="ds-stat-row"><span class="ds-label">Total Pitches</span><span class="ds-val" id="dsTotalPitches">--</span></div>
+    </div>
+  </div>
+  <div class="ds-card">
+    <h4>&#128200; Your Trends</h4>
+    <div id="dsTrends">
+      <div class="ds-stat-row"><span class="ds-label">Games Played</span><span class="ds-val" id="dsGamesPlayed">0</span></div>
+      <div class="ds-stat-row"><span class="ds-label">Best Streak</span><span class="ds-val" id="dsBestStreak">0</span></div>
+      <div class="ds-stat-row"><span class="ds-label">Accuracy</span><span class="ds-val" id="dsAccuracy">0%</span></div>
+      <div class="ds-stat-row"><span class="ds-label">Pitch Read</span><span class="ds-val" id="dsPitchRead">--</span></div>
+      <div class="ds-stat-row"><span class="ds-label">AB Read</span><span class="ds-val" id="dsAbRead">--</span></div>
+    </div>
+  </div>
+  <div class="ds-card">
+    <h4>&#128293; Hot Picks</h4>
+    <div id="dsHotPicks" class="ds-empty">Play a game to see your hot picks</div>
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<div class="desktop-main">
 
 <!-- AUTH -->
 <div class="screen active" id="screenAuth">
@@ -1037,6 +1095,29 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
     </div>
   </div>
 </div>
+
+</div><!-- /desktop-main -->
+
+<!-- RIGHT SIDEBAR (desktop only) -->
+<aside class="desktop-sidebar" id="sidebarRight">
+  <div class="ds-card">
+    <h4>&#127942; Leaderboard</h4>
+    <div id="dsLeaderboard" class="ds-empty">Log in to see the leaderboard</div>
+  </div>
+  <div class="ds-card">
+    <h4>&#128172; Recent Activity</h4>
+    <div id="dsActivity" class="ds-empty">No recent activity</div>
+  </div>
+  <div class="ds-card">
+    <h4>&#9889; Quick Links</h4>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <button onclick="$('btnSoloMode').click()" style="border:none;border-radius:8px;padding:10px;font-size:12px;font-weight:700;font-family:var(--font-head);cursor:pointer;background:linear-gradient(135deg,#10b981,#059669);color:#fff;transition:all .15s">Solo vs CPU</button>
+      <button onclick="$('btnFriendsMode').click()" style="border:none;border-radius:8px;padding:10px;font-size:12px;font-weight:700;font-family:var(--font-head);cursor:pointer;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;transition:all .15s">Play with Friends</button>
+    </div>
+  </div>
+</aside>
+
+</div><!-- /desktop-wrapper -->
 
 <!-- RESUME GAME MODAL -->
 <div class="modal-overlay" id="resumeModal">
@@ -4824,6 +4905,34 @@ document.addEventListener('visibilitychange',()=>{
   }
 });
 window.addEventListener('beforeunload',()=>{if(S.userScore>0){saveLB();saveUserStats()}});
+// ── Desktop sidebar data population ──
+function updateDesktopSidebars(){
+  if(window.innerWidth<1024)return;
+  // Left: Live stats
+  if(cachedGames&&cachedGames.length){
+    const live=cachedGames.filter(g=>g.status.abstractGameState==='Live');
+    $('dsGamesToday').textContent=cachedGames.length;
+    $('dsLiveNow').textContent=live.length;
+  }
+  $('dsTotalPitches').textContent=S.pitchCount||0;
+  // Trends
+  $('dsGamesPlayed').textContent=S.totalPredictions>0?Math.ceil(S.totalPredictions/100):0;
+  $('dsBestStreak').textContent=S.bestStreak||0;
+  $('dsAccuracy').textContent=S.totalPredictions?Math.round(S.correctCount/S.totalPredictions*100)+'%':'0%';
+  $('dsPitchRead').textContent=S.pitchStreak>0?S.pitchStreak+'\uD83D\uDD25':'0';
+  $('dsAbRead').textContent=S.abStreak>0?S.abStreak+'\uD83D\uDD25':'0';
+  // Leaderboard
+  const lb=JSON.parse(localStorage.getItem('dg_lb')||'[]');
+  if(lb.length){
+    $('dsLeaderboard').innerHTML=lb.slice(0,8).map((e,i)=>{
+      const medal=i===0?'\uD83E\uDD47':i===1?'\uD83E\uDD48':i===2?'\uD83E\uDD49':(i+1)+'.';
+      return`<div class="ds-stat-row"><span class="ds-label">${medal} ${e.name||'Player'}</span><span class="ds-val">${e.score||0}</span></div>`;
+    }).join('');
+  }
+}
+// Update sidebars periodically
+setInterval(updateDesktopSidebars,3000);
+
 // Auth handles initial screen — don't show home until logged in
 
 // ── PWA: Register service worker for home screen install ──
