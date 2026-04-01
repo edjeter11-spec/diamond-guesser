@@ -4089,15 +4089,18 @@ async function startDebugSim(){
     debugSim.pitches=pitches;debugSim.idx=0;debugSim.bugs=[];debugSim.active=true;debugSim.paused=false;
     debugSim.startTime=Date.now();
 
-    // Start the game visually
+    // Start the game visually — run as SOLO (no Firebase needed)
     const away=game.teams.away.team.name,home=game.teams.home.team.name;
     const awayId=game.teams.away.team.id,homeId=game.teams.home.team.id;
-    practiceMode=true;S.isMultiplayer=true;
+    practiceMode=true;S.isMultiplayer=false;S.isHost=false;
     startGame(game.gamePk,away,home,awayId,homeId);
-
-    // Override MP scores to show bots
-    $('soloScores').style.display='none';
-    $('gameTime').textContent='\uD83D\uDD27 Debug Sim: '+away+' vs '+home+' ('+ds+') — '+pitches.length+' pitches';
+    // Override: stop all fetch loops (we drive pitches manually)
+    clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
+    S.gameActive=true;
+    $('practiceBadge').classList.add('show');
+    $('practiceControls').classList.remove('show');
+    document.querySelector('.delay-bar').style.display='none';
+    $('gameTime').textContent='\uD83D\uDD27 Debug Sim: '+away+' vs '+home+' ('+ds+') \u2014 '+pitches.length+' pitches';
 
     // Show debug panel
     $('debugPanel').classList.add('show');
@@ -4171,17 +4174,19 @@ function debugSimStep(){
     debugSim.bugs.push(bug);debugLog('err','BUG: '+bug);
   }
 
-  // Both bots make their picks
+  // Both bots make their picks — using same scoring as real game
   for(const bot of debugSim.bots){
     const pick=aiPick(pitch.count,pitch.countOuts,pitch.r1||pitch.r2||pitch.r3);
     bot.picks.push(pick);
     bot.total++;
 
-    // Score the pick
+    // Score the pick — same formula as resolvePitch
     let pts=scoreCall(pick,pitch.callCode,pitch.playResult,pitch.countBalls,pitch.countStrikes);
     if(pts>0){
       bot.correct++;bot.streak++;
-      if(bot.streak>=3)pts+=Math.floor((bot.streak-2)*pts*0.1);
+      // Streak multiplier: base × (1 + streak × 0.1) — matches real game
+      const streakMult=1+(bot.streak*0.1);
+      pts=Math.round(pts*streakMult);
       bot.score+=pts;
     }else{
       bot.streak=0;
@@ -4200,12 +4205,18 @@ function debugSimStep(){
     }
   }
 
-  // At-bat result check
+  // At-bat result check — same scoring as resolveAtBat
   if(pitch.isLastPitchOfAB&&pitch.abResult){
     for(const bot of debugSim.bots){
       const abPick=aiAbPick();
-      const abPts=abPick===pitch.abResult?(AB_SCORES[pitch.abResult]||30):0;
-      if(abPts>0)bot.score+=abPts;
+      let abPts=abPick===pitch.abResult?(AB_SCORES[pitch.abResult]||30):0;
+      if(abPts>0){
+        if(!bot.abStreak)bot.abStreak=0;
+        bot.abStreak++;
+        const abMult=1+(bot.abStreak*0.1);
+        abPts=Math.round(abPts*abMult);
+        bot.score+=abPts;
+      }else{bot.abStreak=0}
     }
   }
 
@@ -4227,14 +4238,11 @@ function debugSimStep(){
     (pitch.isLastPitchOfAB?' | AB: '+pitch.abResult:'')
   );
 
-  // Update MP scoreboard with bot data
-  $('mpScoresList').innerHTML=[b0,b1].sort((a,b)=>b.score-a.score).map((bot,i)=>{
-    const medal=i===0?'\uD83E\uDD47 ':'\uD83E\uDD48 ';
-    const streak=bot.streak>=2?'\uD83D\uDD25'.repeat(Math.min(bot.streak,5)):'';
-    const acc=bot.total?Math.round(bot.correct/bot.total*100)+'%':'0%';
-    return`<div class="mp-row"><span class="mp-name">${medal}${bot.name} ${streak} <span style="font-size:9px;color:var(--muted)">${acc}</span></span><span class="mp-pts">${bot.score}</span></div>`;
-  }).join('');
+  // Update solo score cards with bot data
   $('yourScore').textContent=b0.score;$('cpuScore').textContent=b1.score;
+  S.userScore=b0.score;S.cpuScore=b1.score;
+  S.pitchStreak=b0.streak;S.streak=b0.streak;
+  updateStreakUI();
 
   // Update status bar
   $('statusBar').textContent='\uD83D\uDD27 Pitch #'+debugSim.idx+'/'+debugSim.pitches.length+' — '+pitch.desc;
