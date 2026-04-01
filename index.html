@@ -1505,9 +1505,9 @@ function mpCheckReady(){
 }
 function mpSendScore(pick,got){
   if(!S.isMultiplayer||!roomRef)return;
-  const upd={score:S.userScore,streak:S.streak};
+  const upd={score:S.userScore,streak:S.streak,pitchStreak:S.pitchStreak||0,abStreak:S.abStreak||0};
   if(pick!==undefined)upd.lastPick=pick||'';
-  if(got!==undefined)upd.lastGot=got;// true/false/null
+  if(got!==undefined)upd.lastGot=got;
   roomRef.child('players/'+S.playerId).update(upd);
 }
 function mpDisconnect(intentional){
@@ -1607,10 +1607,11 @@ function renderMPScores(){
     $('spot2Ready').textContent=p2Off?'\u23F8':(p2.ready?'\u2705':'');
     if(p1Off)$('spot1').style.opacity='0.5';else $('spot1').style.opacity='';
     if(p2Off)$('spot2').style.opacity='0.5';else $('spot2').style.opacity='';
-    const s1Streak=p1Off?'\u23F8 Paused':((p1.streak||0)>=2?'\uD83D\uDD25 '+p1.streak+' streak':'');
-    const s2Streak=p2Off?'\u23F8 Paused':((p2.streak||0)>=2?'\uD83D\uDD25 '+p2.streak+' streak':'');
-    $('spot1Stat').textContent=s1Streak;
-    $('spot2Stat').textContent=s2Streak;
+    // Split streak display in spotlight
+    const s1p=p1.pitchStreak||0,s1a=p1.abStreak||0;
+    const s2p=p2.pitchStreak||0,s2a=p2.abStreak||0;
+    $('spot1Stat').textContent=p1Off?'\u23F8 Paused':((s1p>=2?'P:'+s1p+'\uD83D\uDD25 ':'')+(s1a>=2?'AB:'+s1a+'\uD83D\uDD25':''));
+    $('spot2Stat').textContent=p2Off?'\u23F8 Paused':((s2p>=2?'P:'+s2p+'\uD83D\uDD25 ':'')+(s2a>=2?'AB:'+s2a+'\uD83D\uDD25':''));
   }else{spotlight.classList.remove('show')}
 
   // ── Dugout (3rd/4th place) ──
@@ -1623,7 +1624,8 @@ function renderMPScores(){
       const isHot=hotSeat&&p.id===hotSeat.id;
       const isOff=p.online===false;
       const rally=hasRally(p.id)?'<span style="font-size:9px;background:#166534;color:#4ade80;padding:1px 4px;border-radius:3px;margin-left:3px;font-weight:700">RALLY</span>':'';
-      const streak=isOff?'':((p.streak||0)>=2?'\uD83D\uDD25'.repeat(Math.min(p.streak,3)):'');
+      const ps=p.pitchStreak||0,as=p.abStreak||0;
+      const streak=isOff?'':((ps>=2?'P'+ps+'\uD83D\uDD25':'')+(as>=2?' AB'+as+'\uD83D\uDD25':''));
       const pausedTag=isOff?'<span style="font-size:9px;background:#334155;color:var(--muted);padding:1px 4px;border-radius:3px;margin-left:3px;font-weight:700">AWAY</span>':'';
       return`<div class="mp-dugout-row${isHot?' hot-seat':''}"${isMe?' style="color:var(--accent2)"':''}${isOff?' style="opacity:0.5"':''}>
         <span class="dg-rank">${isHot?'\uD83D\uDD25':(i+3)+'.'}</span>
@@ -1652,7 +1654,8 @@ function renderMPScores(){
       const isOff=p.online===false;
       const rank=isLast?'rank-last':(rankClasses[i]||'');
       const medal=isLast?'\uD83D\uDD25':(medals[i]||'');
-      const streak=isOff?'':((p.streak||0)>=2?(' '+'\uD83D\uDD25'.repeat(Math.min(p.streak,5))):'');
+      const ps2=p.pitchStreak||0,as2=p.abStreak||0;
+      const streak=isOff?'':((ps2>=2?'P'+ps2+'\uD83D\uDD25':'')+(as2>=2?' AB'+as2+'\uD83D\uDD25':''));
       let pickTag='';
       if(isOff){pickTag=`<span style="font-size:9px;color:var(--muted);margin-left:3px">\u23F8 Away</span>`}
       else if(p.ready){pickTag=`<span style="font-size:9px;color:#4ade80;margin-left:3px">\u2705</span>`}
@@ -1681,6 +1684,13 @@ function renderMPScores(){
       return`<div class="mp-row${isMe?' me':''}">${medal}<span class="mp-name">${p.name}${pickTag}</span><span class="mp-pts">${p.score||0}</span></div>`;
     }).join('');
   }
+
+  // ── Sync solo score cards with MP data ──
+  $('yourScore').textContent=S.userScore;
+  updateStreakUI();
+  // Update "Players" card with online count
+  const onlineCount=Object.values(S.mpPlayers).filter(p=>p.online!==false).length;
+  $('cpuScore').textContent=onlineCount;
 }
 
 /* ══════════════════════════════════════
@@ -1711,20 +1721,32 @@ function startGame(gameId,away,home,awayId,homeId){
   abReset();
   $('atbatResult').className='atbat-result';
 
+  // ── UNIFIED UI: same layout for solo + multiplayer ──
+  // Solo score cards (You / Streaks / CPU) always visible
+  $('soloScores').style.display='';
   if(S.isMultiplayer){
-    $('soloScores').style.display='none';$('mpScores').style.display='';
+    // In MP, relabel "CPU" card as player count indicator
+    const cpuLabel=document.querySelector('#soloScores .score-card.cpu .sc-label');
+    if(cpuLabel)cpuLabel.textContent='Players';
+    $('cpuScore').textContent=Object.keys(S.mpPlayers).length||2;
+    // Show MP additions alongside solo layout
+    $('mpScores').style.display='';
     $('mpSpotlight').classList.add('show');
+    // Hide solo TV delay bar, show MP spoiler shield instead
     document.querySelector('.delay-bar').style.display='none';
+    $('mpDelayBar').classList.toggle('show',S.isHost);
     mpSendScore();mpState='WAITING';mpHostPitchNum=0;mpRallyStreaks={};
     $('mpSyncBar').classList.remove('show');$('mpWaitingOverlay').classList.remove('show');
     myPickLocked=false;revealTimestamp=0;
-    // Delay bar only shown for host (clients read from Firebase)
-    $('mpDelayBar').classList.toggle('show',S.isHost);
     collapseLeagueInMP();startSpotRotation();showChatButton();
   }else{
-    $('soloScores').style.display='';$('mpScores').style.display='none';
+    // Solo mode
+    const cpuLabel=document.querySelector('#soloScores .score-card.cpu .sc-label');
+    if(cpuLabel)cpuLabel.textContent='CPU';
+    $('mpScores').style.display='none';
     $('mpSpotlight').classList.remove('show');$('mpDugout').classList.remove('show');
     document.querySelector('.delay-bar').style.display='';
+    $('mpDelayBar').classList.remove('show');
     stopSpotRotation();hideChatButton();
   }
 
