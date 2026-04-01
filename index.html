@@ -2035,21 +2035,32 @@ function mpApplyGameState(gs){
   if(gs.pitcherId)$('pitcherImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+gs.pitcherId+'/headshot/67/current';
   if(gs.batterId)$('batterImg').src='https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_80,q_auto:best/v1/people/'+gs.batterId+'/headshot/67/current';
   // New batter? Block during countdown/result display so we don't wipe the at-bat result
+  // Guard: don't reset if we already handled this batter switch recently (prevents double-fire from Firebase + host poll)
   if(gs.batterId&&gs.batterId!==S.lastBatterId&&!mpCountdownActive&&!mpResultShowing){
+    // Only reset if we haven't already processed this exact batter within the last 3 seconds
+    const now=Date.now();
+    if(S._lastBatterResetTime&&now-S._lastBatterResetTime<3000&&S.lastBatterId===gs.batterId){
+      // Already reset for this batter — skip (prevents clearing locked picks)
+      return;
+    }
+    S._lastBatterResetTime=now;
     S.lastBatterId=gs.batterId;S.currentCount={balls:0,strikes:0};S.currentOuts=gs.outs;
-    // Clear mid-at-bat lock — new batter means fresh start
     midAtBatLocked=false;
     if(S.isHost&&roomRef)roomRef.child('midAtBatLocked').set(false);
-    // ALWAYS reset at-bat for new batter — no matter what state the previous was in
-    _lastResolvedPitchId=0;// Reset idempotency lock for new batter
+    _lastResolvedPitchId=0;
+    // Only wipe pitch state if user hasn't already locked a pick for this new batter
+    if(!pitchLocked){
+      S.userPick='';
+      resetPitchState();
+      setPred(true);
+    }
+    // Always reset at-bat for new batter
     abReset();
     S.atBatPick='';S.atBatRbiPick=false;S.atBatResolved=0;
     clearZone();
     renderCountDots(0,0,gs.outs);
     const cd=$('countDisplay');if(cd)cd.innerHTML='<span>0</span>-<span>0</span> \u2022 '+gs.outs+' out';
     updateDynamicOdds(0,0);
-    setPred(true);resetPitchState();
-    // Force unlock and re-enable ALL at-bat buttons for new batter
     $('atbatCard').classList.remove('locked');
     $('atbatLockedMsg').textContent='';
     $('hitSub').classList.remove('open');
