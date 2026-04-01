@@ -292,6 +292,30 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .stress-stats .ss.bad .sv{color:#ef4444}
 .stress-stats .ss.good .sv{color:#4ade80}
 
+/* ── Dual View (two screens side by side) ── */
+.dual-view{display:none;position:fixed;inset:0;z-index:300;background:var(--bg);flex-direction:column}
+.dual-view.show{display:flex}
+.dual-header{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--card);border-bottom:1px solid #334155;flex-shrink:0}
+.dual-header h3{font-size:13px;font-weight:800;color:var(--accent)}
+.dual-header button{border:none;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer}
+.dual-close{background:#7f1d1d;color:#fca5a5}
+.dual-body{flex:1;display:flex;gap:2px;min-height:0}
+.dual-body iframe{flex:1;border:none;min-width:0;border-radius:0}
+.dual-label{position:absolute;top:4px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:800;padding:2px 8px;border-radius:4px;z-index:1;pointer-events:none}
+.dual-pane{flex:1;position:relative;min-width:0;display:flex;flex-direction:column}
+.dual-pane.pane-a .dual-label{background:rgba(16,185,129,0.3);color:#4ade80}
+.dual-pane.pane-b .dual-label{background:rgba(59,130,246,0.3);color:#60a5fa}
+
+/* ── Game Picker modal ── */
+.game-picker-list{max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin:8px 0}
+.gp-item{background:var(--card2);border-radius:8px;padding:10px;cursor:pointer;display:flex;align-items:center;gap:8px;border:1px solid transparent;transition:all .15s}
+.gp-item:active{transform:scale(0.98);border-color:var(--accent)}
+.gp-item .gp-teams{flex:1;font-size:13px;font-weight:700}
+.gp-item .gp-status{font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px}
+.gp-item .gp-status.live{background:rgba(239,68,68,0.2);color:var(--red)}
+.gp-item .gp-status.final{background:rgba(100,116,139,0.2);color:var(--muted)}
+.gp-item .gp-score{font-size:12px;color:var(--muted)}
+
 /* Split-screen player panels */
 .stress-split{display:flex;gap:6px;margin:6px 0}
 .stress-player{flex:1;background:var(--card);border-radius:10px;padding:8px;border:1px solid #334155;min-width:0}
@@ -934,7 +958,13 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 
   <!-- Stress Test Panel -->
   <div class="stress-panel" id="stressPanel">
-    <h4><span>&#9889; LIVE Stress Test</span><span id="stressStatus" style="font-size:9px;font-weight:400;color:var(--muted)"></span></h4>
+    <h4>
+      <span>&#9889; LIVE Stress Test</span>
+      <span style="display:flex;gap:4px;align-items:center">
+        <button onclick="manualBugReport()" style="border:none;border-radius:4px;padding:3px 8px;font-size:9px;font-weight:700;cursor:pointer;background:#991b1b;color:#fca5a5">&#128027; Report Bug</button>
+        <span id="stressStatus" style="font-size:9px;font-weight:400;color:var(--muted)"></span>
+      </span>
+    </h4>
     <!-- Side-by-side player view -->
     <div class="stress-split">
       <div class="stress-player sp-a">
@@ -1098,6 +1128,8 @@ auth.onAuthStateChanged(async(user)=>{
     $('balVal').textContent=userBalance.toLocaleString();
     $('logoutBtn').style.display=isGuest?'none':'';
     $('homeBalance').style.display='';
+    // Check if launched as stress test iframe
+    if(checkStressUrlParams()){renderHomeLB();loadGames();return}
     // Try to rejoin an active multiplayer room (page reload)
     const rejoined=await tryRejoinRoom();
     if(!rejoined){showScreen('screenHome');renderHomeLB();loadGames()}
@@ -4370,69 +4402,165 @@ function stressCheckScores(){
   }
 }
 
+// ── GAME PICKER + DUAL VIEW ──
+let gpGames=[];let gpDate='today';
+
 async function startStressTest(){
-  $('btnStressTest').textContent='Finding live game...';
+  // Open game picker modal
+  $('gamePickerModal').classList.add('show');
+  loadGamesForPicker('today');
+}
+
+async function loadGamesForPicker(when){
+  gpDate=when;
+  $('gpToday').style.background=when==='today'?'var(--accent)':'var(--card2)';
+  $('gpToday').style.color=when==='today'?'#000':'var(--muted)';
+  $('gpYesterday').style.background=when==='yesterday'?'var(--accent)':'var(--card2)';
+  $('gpYesterday').style.color=when==='yesterday'?'#000':'var(--muted)';
+  $('gpList').innerHTML='<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px">Loading games...</div>';
+
+  const d=new Date();
+  if(when==='yesterday')d.setDate(d.getDate()-1);
+  const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+
   try{
-    // Find a LIVE game
-    const today=new Date();
-    const ds=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
     const r=await fetch('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+ds+'&hydrate=linescore');
     const sched=await r.json();
-    const games=(sched.dates&&sched.dates[0]&&sched.dates[0].games)||[];
-    let liveGame=games.find(g=>g.status.abstractGameState==='Live');
-    if(!liveGame){
-      // No live game — fall back to practice sim mode
-      stressLog('warn','No live games — falling back to yesterday\'s completed game');
-      const d2=new Date();d2.setDate(d2.getDate()-1);
-      const ds2=d2.getFullYear()+'-'+String(d2.getMonth()+1).padStart(2,'0')+'-'+String(d2.getDate()).padStart(2,'0');
-      const r2=await fetch('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+ds2+'&hydrate=linescore');
-      const sched2=await r2.json();
-      const games2=(sched2.dates&&sched2.dates[0]&&sched2.dates[0].games)||[];
-      liveGame=games2.find(g=>g.status.abstractGameState==='Final');
-      if(!liveGame){$('btnStressTest').textContent='No games found';return}
-    }
+    gpGames=(sched.dates&&sched.dates[0]&&sched.dates[0].games)||[];
+    if(!gpGames.length){$('gpList').innerHTML='<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px">No games found for '+ds+'</div>';return}
 
-    const gId=liveGame.gamePk;
-    const away=liveGame.teams.away.team.name,home=liveGame.teams.home.team.name;
-    const awayId=liveGame.teams.away.team.id,homeId=liveGame.teams.home.team.id;
+    // Sort: live first, then final, then preview
+    const order={Live:0,Final:1,Preview:2};
+    gpGames.sort((a,b)=>(order[a.status.abstractGameState]||3)-(order[b.status.abstractGameState]||3));
 
-    // Reset stress test state
-    stressTest={active:true,timer:null,pitchesProcessed:0,errors:[],
-      syncErrors:0,doubleHits:0,skippedPitches:0,scoreMismatches:0,
-      spoilerLeaks:0,lastPitchNum:0,lastScoreA:0,lastScoreB:0,
-      revealTimes:[],pickTimes:[],startTime:Date.now()};
-
-    // Start as solo (not MP) so we control everything locally
-    S.isMultiplayer=false;S.isHost=false;
-    startGame(gId,away,home,awayId,homeId);
-
-    $('stressPanel').classList.add('show');
-    $('stressLog').innerHTML='';
-    $('stressStatus').textContent='LIVE';
-    $('btnStressTest').textContent='\u26A1 Live Stress Test (2 AI + Real Game)';
-
-    stressLog('info','=== STRESS TEST STARTED ===');
-    stressLog('info','Game: '+away+' vs '+home+' ('+gId+')');
-    stressLog('info','Mode: '+liveGame.status.abstractGameState);
-    stressLog('info','Auto-picking for Player_A + CPU (Player_B)');
-    updateStressStats();
-
-    // Hook into the game loop — auto-pick every 500ms
-    stressTest.timer=setInterval(()=>{
-      if(!stressTest.active||!S.gameActive){stopStressTest();return}
-      stressAutoPick();
-      stressCheckScores();
-      stressCheckSpoilerShield();
-      updateStressStats();
-
-      // Check pitch sequence via pitchCount
-      if(S.pitchCount>0)stressCheckPitch(S.pitchCount);
-    },500);
-
+    $('gpList').innerHTML=gpGames.map((g,i)=>{
+      const away=g.teams.away.team.name,home=g.teams.home.team.name;
+      const state=g.status.abstractGameState;
+      const score=state!=='Preview'?((g.teams.away.score||0)+' - '+(g.teams.home.score||0)):'';
+      const statusCls=state==='Live'?'live':'final';
+      const detail=g.status.detailedState||state;
+      return`<div class="gp-item" onclick="pickGameForStress(${i})">
+        <div class="gp-teams">${away} vs ${home}</div>
+        <span class="gp-score">${score}</span>
+        <span class="gp-status ${statusCls}">${detail}</span>
+      </div>`;
+    }).join('');
   }catch(e){
-    stressLog('err','FATAL: '+e.message);
-    $('btnStressTest').textContent='Error: '+e.message;
+    $('gpList').innerHTML='<div style="text-align:center;color:var(--red);font-size:12px;padding:20px">Error loading games</div>';
   }
+}
+
+$('gpToday').addEventListener('click',()=>loadGamesForPicker('today'));
+$('gpYesterday').addEventListener('click',()=>loadGamesForPicker('yesterday'));
+
+function pickGameForStress(idx){
+  const g=gpGames[idx];if(!g)return;
+  $('gamePickerModal').classList.remove('show');
+
+  const gId=g.gamePk;
+  const away=g.teams.away.team.name,home=g.teams.home.team.name;
+  const state=g.status.abstractGameState;
+  const isFinal=state==='Final';
+
+  // Open dual view with two iframes
+  $('dualView').classList.add('show');
+  $('dualGameLabel').textContent=away+' vs '+home+' ('+state+')';
+
+  // Build URL params for each player
+  const base=window.location.origin+window.location.pathname;
+  const params='?stressGame='+gId+'&away='+encodeURIComponent(away)+'&home='+encodeURIComponent(home)+'&awayId='+g.teams.away.team.id+'&homeId='+g.teams.home.team.id+(isFinal?'&mode=sim':'&mode=live');
+
+  $('dualFrameA').src=base+params+'&player=A';
+  $('dualFrameB').src=base+params+'&player=B';
+}
+
+function closeDualView(){
+  $('dualView').classList.remove('show');
+  $('dualFrameA').src='about:blank';
+  $('dualFrameB').src='about:blank';
+}
+
+// ── AUTO-START FROM URL PARAMS (inside iframe) ──
+function checkStressUrlParams(){
+  const params=new URLSearchParams(window.location.search);
+  const stressGame=params.get('stressGame');
+  if(!stressGame)return false;
+
+  const gId=parseInt(stressGame);
+  const away=params.get('away')||'Away';
+  const home=params.get('home')||'Home';
+  const awayId=parseInt(params.get('awayId'))||0;
+  const homeId=parseInt(params.get('homeId'))||0;
+  const mode=params.get('mode')||'live';
+  const player=params.get('player')||'A';
+
+  // Auto-start after auth completes (called from onAuthStateChanged)
+  S.playerName='Bot_'+player;
+  setTimeout(async()=>{
+
+    if(mode==='sim'){
+      // Simulation: load game data and run practice mode
+      try{
+        const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+gId+'/feed/live');
+        const gd=await r.json();
+        practiceGameData=gd;
+        const allPlays=gd.liveData.plays.allPlays||[];
+        practicePitches=extractPracticeData(allPlays);
+        practiceMode=true;S.isMultiplayer=false;
+        startGame(gId,away,home,awayId,homeId);
+        clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
+        S.gameActive=true;
+        $('practiceBadge').classList.add('show');
+        $('gameTime').textContent='\uD83D\uDD27 Stress Bot '+player+': '+away+' vs '+home;
+        // Set to fast auto mode
+        practiceSpeed=3000;
+        $('practiceControls').classList.remove('show');
+        // Show stress panel
+        $('stressPanel').classList.add('show');$('stressLog').innerHTML='';
+        stressTest={active:true,timer:null,pitchesProcessed:0,errors:[],syncErrors:0,doubleHits:0,skippedPitches:0,scoreMismatches:0,spoilerLeaks:0,lastPitchNum:0,lastScoreA:0,lastScoreB:0,revealTimes:[],pickTimes:[],startTime:Date.now()};
+        stressLog('info','Bot '+player+' started on '+away+' vs '+home);
+        updateStressStats();
+        // Auto-pick loop
+        stressTest.timer=setInterval(()=>{
+          if(!stressTest.active||!S.gameActive){stopStressTest();return}
+          stressAutoPick();stressCheckScores();updateStressStats();
+          if(S.pitchCount>0)stressCheckPitch(S.pitchCount);
+        },500);
+        // Auto-advance practice pitches
+        let simTimer=setInterval(()=>{
+          if(!S.gameActive||practiceIdx>=practicePitches.length){clearInterval(simTimer);return}
+          practiceNextPitch();
+        },2500);
+      }catch(e){console.error('Stress sim error:',e)}
+    }else{
+      // Live mode
+      S.isMultiplayer=false;
+      startGame(gId,away,home,awayId,homeId);
+      $('gameTime').textContent='\uD83D\uDD27 Stress Bot '+player+' (LIVE): '+away+' vs '+home;
+      $('stressPanel').classList.add('show');$('stressLog').innerHTML='';
+      stressTest={active:true,timer:null,pitchesProcessed:0,errors:[],syncErrors:0,doubleHits:0,skippedPitches:0,scoreMismatches:0,spoilerLeaks:0,lastPitchNum:0,lastScoreA:0,lastScoreB:0,revealTimes:[],pickTimes:[],startTime:Date.now()};
+      stressLog('info','Bot '+player+' LIVE on '+away+' vs '+home);
+      updateStressStats();
+      stressTest.timer=setInterval(()=>{
+        if(!stressTest.active||!S.gameActive){stopStressTest();return}
+        stressAutoPick();stressCheckScores();updateStressStats();
+        if(S.pitchCount>0)stressCheckPitch(S.pitchCount);
+      },500);
+    }
+  },1000);
+
+  return true;
+}
+
+// Manual bug report — you see a glitch the data can't detect
+function manualBugReport(){
+  const desc=prompt('Describe the bug you just saw:');
+  if(!desc)return;
+  const ctx='Pitch #'+(S.pitchCount||0)+' | Score: '+S.userScore+' | Status: '+($('statusBar').textContent||'');
+  stressTest.errors.push('[MANUAL] '+desc);
+  stressLog('err','[MANUAL BUG] '+desc);
+  stressLog('warn','Context: '+ctx);
+  updateStressStats();
 }
 
 function stopStressTest(){
@@ -4508,6 +4636,35 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch
   <div class="mp-chat-input-row">
     <input class="mp-chat-input" id="chatInput" placeholder="Type a message..." maxlength="200" autocomplete="off">
     <button class="mp-chat-send" id="chatSend" onclick="sendChat()">Send</button>
+  </div>
+</div>
+
+<!-- Dual View (side-by-side stress test) -->
+<div class="dual-view" id="dualView">
+  <div class="dual-header">
+    <h3>&#9889; Dual View Stress Test</h3>
+    <div style="display:flex;gap:6px;align-items:center">
+      <span id="dualGameLabel" style="font-size:10px;color:var(--muted)"></span>
+      <button class="dual-close" onclick="closeDualView()">&#9632; Stop</button>
+    </div>
+  </div>
+  <div class="dual-body">
+    <div class="dual-pane pane-a"><div class="dual-label">PLAYER A</div><iframe id="dualFrameA"></iframe></div>
+    <div class="dual-pane pane-b"><div class="dual-label">PLAYER B</div><iframe id="dualFrameB"></iframe></div>
+  </div>
+</div>
+
+<!-- Game Picker Modal -->
+<div class="modal-overlay" id="gamePickerModal">
+  <div class="modal-box" style="max-width:400px">
+    <h3>&#9889; Pick a Game to Test</h3>
+    <p>Choose a live or completed game for the stress test</p>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <button id="gpToday" style="flex:1;border:none;border-radius:6px;padding:6px;font-size:11px;font-weight:700;cursor:pointer;background:var(--accent);color:#000">Today</button>
+      <button id="gpYesterday" style="flex:1;border:none;border-radius:6px;padding:6px;font-size:11px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--muted)">Yesterday</button>
+    </div>
+    <div class="game-picker-list" id="gpList"><div style="text-align:center;color:var(--muted);font-size:12px;padding:20px">Loading games...</div></div>
+    <button class="modal-cancel" onclick="$('gamePickerModal').classList.remove('show')" style="margin-top:8px">Cancel</button>
   </div>
 </div>
 
