@@ -2580,14 +2580,23 @@ const AB_SCORES={Strikeout:25,Walk:30,Groundout:20,Flyout:20,Single:50,Double:10
 function resolveAtBat(event,rbi){
   S.atBatResolved=S.lastBatterId;abState='result';
   let ev=event;
-  if(ev.includes('Strikeout')||ev.includes('Strikes out'))ev='Strikeout';
+  // Normalize MLB event strings to our pick categories
+  if(ev.includes('Strikeout')||ev.includes('Strikes out')||ev.includes('Struck Out'))ev='Strikeout';
+  else if(ev.includes('Hit By Pitch')||ev.includes('Hit by Pitch')||ev.includes('HBP'))ev='Walk'; // HBP = free base, counts as Walk
+  else if(ev.includes('Intent Walk')||ev.includes('Intentional Walk'))ev='Walk';
   else if(ev.includes('Walk'))ev='Walk';
-  else if(ev.includes('Groundout')||ev.includes('Grounded')||ev.includes('Ground'))ev='Groundout';
-  else if(ev.includes('Flyout')||ev.includes('Fly Out')||ev.includes('Pop Out')||ev.includes('Lineout')||ev.includes('Line Out'))ev='Flyout';
+  else if(ev.includes('Sac Fly')||ev.includes('Sacrifice Fly'))ev='Flyout'; // Sac fly = out, counts as Flyout
+  else if(ev.includes('Sac Bunt')||ev.includes('Sacrifice Bunt'))ev='Groundout'; // Sac bunt = out, counts as Groundout
+  else if(ev.includes('Groundout')||ev.includes('Grounded')||ev.includes('Ground')||ev.includes('Fielders Choice')||ev.includes("Fielder's Choice")||ev.includes('Force Out')||ev.includes('Forceout'))ev='Groundout';
+  else if(ev.includes('Flyout')||ev.includes('Fly Out')||ev.includes('Pop Out')||ev.includes('Lineout')||ev.includes('Line Out')||ev.includes('Caught Stealing')||ev.includes('Pickoff'))ev='Flyout';
+  else if(ev.includes('Field Error')||ev.includes('Error')||ev.includes('Catcher Interference'))ev='Single'; // Reached on error = effectively a single
   else if(ev.includes('Home Run'))ev='Home Run';
   else if(ev.includes('Triple'))ev='Triple';
   else if(ev.includes('Double'))ev='Double';
   else if(ev.includes('Single'))ev='Single';
+  else if(ev.includes('Runner Out'))ev='Groundout'; // Runner thrown out
+  // If still unrecognized, log it and treat as the closest match
+  else{console.warn('[resolveAtBat] Unrecognized event: "'+event+'" — treating as Groundout');ev='Groundout'}
 
   let uPts=0,cPts=0;
   const sit=getSitMult();
