@@ -441,6 +441,26 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .ptype-btn:active{transform:scale(0.95)}.ptype-btn.sel{outline:2px solid var(--accent);color:var(--text)}
 
 /* Status */
+/* ── Synced Reveal: Host Delay Slider ── */
+.mp-delay-bar{display:none;background:var(--card);border-radius:var(--radius);padding:8px 12px;gap:6px;align-items:center;margin:2px 0;flex-wrap:wrap}
+.mp-delay-bar.show{display:flex}
+.mp-delay-bar label{font-size:11px;color:var(--muted);font-weight:700;white-space:nowrap}
+.mp-delay-bar input[type=range]{flex:1;accent-color:var(--accent);min-width:80px;height:18px}
+.mp-delay-bar .mdv{font-size:13px;font-weight:800;min-width:36px;text-align:center;color:var(--accent)}
+.mp-delay-bar .md-hint{font-size:9px;color:var(--muted);width:100%;text-align:center}
+
+/* ── Waiting Overlay (early pickers) ── */
+.mp-waiting-overlay{display:none;background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #334155;border-radius:var(--radius);padding:16px;text-align:center;margin:4px 0}
+.mp-waiting-overlay.show{display:block}
+.mp-waiting-overlay .mw-icon{font-size:32px;margin-bottom:6px}
+.mp-waiting-overlay .mw-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:4px}
+.mp-waiting-overlay .mw-sub{font-size:11px;color:var(--muted)}
+.mp-waiting-overlay .mw-progress{display:flex;gap:6px;justify-content:center;margin-top:8px}
+.mp-waiting-overlay .mw-gate{padding:4px 10px;border-radius:6px;font-size:10px;font-weight:700}
+.mp-waiting-overlay .mw-gate.open{background:#166534;color:#4ade80}
+.mp-waiting-overlay .mw-gate.closed{background:#7f1d1d;color:#fca5a5;animation:readyPulse 1.5s ease-in-out infinite}
+.mp-waiting-overlay .mw-timer{font-size:20px;font-weight:900;color:var(--accent);margin-top:4px}
+
 /* Sticky prediction controls — always visible at bottom */
 .sticky-controls{position:sticky;bottom:0;z-index:50;background:var(--bg);padding-bottom:calc(4px + var(--safe-bot))}
 .status-bar{background:var(--card);border-radius:var(--radius);padding:10px 12px;text-align:center;font-weight:600;font-size:14px;transition:background .3s,color .3s;min-height:42px;display:flex;align-items:center;justify-content:center}
@@ -652,6 +672,24 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   </div>
   <!-- MP Dugout (3rd/4th place) -->
   <div class="mp-dugout" id="mpDugout"><div class="mp-dugout-header">&#9917; Dugout</div><div id="mpDugoutList"></div></div>
+  <!-- Host Delay Slider (Synced Reveal) -->
+  <div class="mp-delay-bar" id="mpDelayBar">
+    <label>&#128250; Spoiler Shield</label>
+    <input type="range" id="mpDelaySlider" min="0" max="60" value="20">
+    <div class="mdv" id="mpDelayVal">20s</div>
+    <div class="md-hint">Match your TV delay — pitch stays hidden until timer + all picks are in</div>
+  </div>
+  <!-- Waiting Overlay (early pickers) -->
+  <div class="mp-waiting-overlay" id="mpWaitingOverlay">
+    <div class="mw-icon">&#9203;</div>
+    <div class="mw-title">Locked In!</div>
+    <div class="mw-sub">Waiting for the reveal...</div>
+    <div class="mw-progress">
+      <span class="mw-gate closed" id="mwGatePlayers">&#9744; Players</span>
+      <span class="mw-gate closed" id="mwGateTimer">&#9744; Timer</span>
+    </div>
+    <div class="mw-timer" id="mwTimer"></div>
+  </div>
   <!-- Double Down Wager -->
   <div class="mp-wager" id="mpWager">
     <div class="mp-wager-label">Double Down?</div>
@@ -1333,14 +1371,17 @@ function mpCheckReady(){
   const abReady=abState==='locked'||abState==='result';
   if(pitchReady&&abReady){
     roomRef.child('players/'+S.playerId+'/ready').set(true);
-    // Play pop sound + haptic on lock-in
     playPop();
     if(navigator.vibrate)navigator.vibrate(30);
+    // Mark this player as locked in — show waiting overlay
+    myPickLocked=true;
     // Hot seat: if I'm the hot seat player and 3+ people, broadcast my pitch pick
     const hotSeat=getHotSeatPlayer();
     if(hotSeat&&hotSeat.id===S.playerId&&Object.keys(S.mpPlayers).length>=3){
       roomRef.child('hotSeatPick').set({playerId:S.playerId,name:S.playerName,pick:S.userPick,t:Date.now()});
     }
+    // Trigger an immediate check of both gates (host will also check via poll)
+    attemptReveal();
   }
 }
 function mpSendScore(pick,got){
@@ -1556,7 +1597,10 @@ function startGame(gameId,away,home,awayId,homeId){
     $('mpSpotlight').classList.add('show');
     document.querySelector('.delay-bar').style.display='none';
     mpSendScore();mpState='WAITING';mpHostPitchNum=0;mpRallyStreaks={};
-    $('mpSyncBar').classList.remove('show');
+    $('mpSyncBar').classList.remove('show');$('mpWaitingOverlay').classList.remove('show');
+    myPickLocked=false;revealTimestamp=0;
+    // Delay bar only shown for host (clients read from Firebase)
+    $('mpDelayBar').classList.toggle('show',S.isHost);
     collapseLeagueInMP();startSpotRotation();showChatButton();
   }else{
     $('soloScores').style.display='';$('mpScores').style.display='none';
@@ -1580,41 +1624,109 @@ function startGame(gameId,away,home,awayId,homeId){
     fetchLoop();S.queueInterval=setInterval(processQueue,300);
   }
 }
-function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);clearTimeout(mpCountdownTimer);stopTicker();stopSpotRotation();hideWager();$('mpSpotlight').classList.remove('show');$('mpDugout').classList.remove('show');$('mpSyncBar').classList.remove('show');$('pitchOverlay').classList.remove('show');collapseLeagueInMP();if(S.userScore>0){saveLB();saveUserStats()}}
+function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);clearTimeout(mpCountdownTimer);if(attemptRevealTimer){clearInterval(attemptRevealTimer);attemptRevealTimer=null}stopTicker();stopSpotRotation();hideWager();$('mpSpotlight').classList.remove('show');$('mpDugout').classList.remove('show');$('mpSyncBar').classList.remove('show');$('pitchOverlay').classList.remove('show');$('mpWaitingOverlay').classList.remove('show');$('mpDelayBar').classList.remove('show');collapseLeagueInMP();if(S.userScore>0){saveLB();saveUserStats()}}
 
 /* ══════════════════════════════════════
    MULTIPLAYER SYNC — Host drives everything
    ══════════════════════════════════════ */
 let mpCountdownTimer=null;let mpPendingPitch=null;let mpCountdownActive=false;let mpLastPitchNum=0;let mpResultShowing=false;let mpFirstFetch=true;let midAtBatLocked=false;
 
+/* ══════════════════════════════════════
+   SYNCED REVEAL — Double-Gate System
+   ══════════════════════════════════════ */
+let globalDelay=20000; // ms — host sets this via slider
+let revealTimestamp=0; // when the delay gate opens
+let attemptRevealTimer=null; // polling interval
+let myPickLocked=false; // track if I've locked in this round
+
+// Host delay slider
+if($('mpDelaySlider')){
+  $('mpDelaySlider').addEventListener('input',function(){
+    globalDelay=parseInt(this.value)*1000;
+    $('mpDelayVal').textContent=this.value+'s';
+    // Broadcast to Firebase so clients know the delay
+    if(roomRef&&S.isHost)roomRef.child('globalDelay').set(parseInt(this.value));
+  });
+}
+
+// Called every time a player submits a pick AND on a 500ms timer
+function attemptReveal(){
+  if(!S.isMultiplayer||!S.gameActive||!mpPendingPitch||mpCountdownActive||mpState==='COUNTDOWN')return;
+  const now=Date.now();
+  const timerReady=now>=revealTimestamp;
+  const playerArr=Object.values(S.mpPlayers);
+  const onlinePlayers=playerArr.filter(p=>p.online!==false);
+  const total=onlinePlayers.length;
+  const readyCount=onlinePlayers.filter(p=>p.ready===true).length;
+  const allReady=total>=2&&readyCount>=total;
+
+  // Update waiting overlay gates
+  if(myPickLocked){
+    $('mpWaitingOverlay').classList.add('show');
+    $('mwGatePlayers').className='mw-gate '+(allReady?'open':'closed');
+    $('mwGatePlayers').textContent=(allReady?'\u2611':'\u2610')+' '+readyCount+'/'+total+' players';
+    $('mwGateTimer').className='mw-gate '+(timerReady?'open':'closed');
+    if(!timerReady){
+      const secsLeft=Math.ceil((revealTimestamp-now)/1000);
+      $('mwGateTimer').textContent='\u2610 '+secsLeft+'s';
+      $('mwTimer').textContent=secsLeft+'s';
+    }else{
+      $('mwGateTimer').textContent='\u2611 Timer';
+      $('mwTimer').textContent='';
+    }
+  }
+
+  // Update status bar with ready count
+  if(readyCount>0&&readyCount<total&&!timerReady){
+    $('statusBar').textContent='\u2705 '+readyCount+'/'+total+' ready \u2022 '+Math.ceil((revealTimestamp-now)/1000)+'s delay';
+  }else if(readyCount>0&&readyCount<total){
+    $('statusBar').textContent='\u2705 '+readyCount+'/'+total+' players ready...';
+  }else if(allReady&&!timerReady){
+    $('statusBar').textContent='\u23F3 All ready! Spoiler shield: '+Math.ceil((revealTimestamp-now)/1000)+'s...';
+    $('statusBar').className='status-bar countdown';
+  }
+
+  // ── THE DOUBLE GATE ──
+  // BOTH conditions must be true to reveal
+  if(timerReady&&allReady){
+    // Clear the polling timer
+    if(attemptRevealTimer){clearInterval(attemptRevealTimer);attemptRevealTimer=null}
+    myPickLocked=false;
+    $('mpWaitingOverlay').classList.remove('show');
+
+    // Host triggers the countdown for everyone
+    if(S.isHost&&roomRef){
+      roomRef.child('hotSeatPick').remove();
+      const safePitch=JSON.parse(JSON.stringify(mpPendingPitch,(k,v)=>v===null?0:v));
+      roomRef.child('countdown').set({t:Date.now(),p:safePitch});
+      mpPendingPitch=null;
+    }
+  }else if(total<2&&playerArr.length>=2){
+    $('statusBar').textContent='\u23F8 Waiting for another player to come back...';$('statusBar').className='status-bar paused';
+  }
+}
+
+// Start the reveal polling timer (runs on host only)
+function startAttemptRevealLoop(){
+  if(attemptRevealTimer)clearInterval(attemptRevealTimer);
+  attemptRevealTimer=setInterval(attemptReveal,500);
+}
+
 // HOST: fetch API, broadcast state, wait for all ready, trigger countdown
 function mpHostStart(){
   mpHostFetch();
-  // Listen for players ready — sync handshake before countdown
+  // Show delay slider for host
+  $('mpDelayBar').classList.add('show');
+  // Broadcast initial delay
+  roomRef.child('globalDelay').set(globalDelay/1000);
+  // Start the double-gate polling loop
+  startAttemptRevealLoop();
+
+  // Listen for players ready — triggers attemptReveal via the polling loop
   roomRef.child('players').on('value',snap=>{
     S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
-    if(mpPendingPitch&&S.gameActive&&!mpCountdownActive&&mpState!=='COUNTDOWN'){
-      const playerArr=Object.values(S.mpPlayers);
-      // Only wait for ONLINE players — offline players' points are paused
-      const onlinePlayers=playerArr.filter(p=>p.online!==false);
-      const total=onlinePlayers.length;
-      const readyCount=onlinePlayers.filter(p=>p.ready===true).length;
-
-      if(readyCount>0&&readyCount<total){
-        $('statusBar').textContent='\u2705 '+readyCount+'/'+total+' players ready...';
-      }
-
-      // Need at least 2 online players to continue, and all online must be ready
-      if(total>=2&&readyCount>=total){
-        roomRef.child('hotSeatPick').remove();
-        const safePitch=JSON.parse(JSON.stringify(mpPendingPitch,(k,v)=>v===null?0:v));
-        roomRef.child('countdown').set({t:Date.now(),p:safePitch});
-        mpPendingPitch=null;
-      }else if(total<2&&playerArr.length>=2){
-        // Only 1 online player left — show waiting message
-        $('statusBar').textContent='\u23F8 Waiting for another player to come back...';$('statusBar').className='status-bar paused';
-      }
-    }
+    // Also run an immediate check (don't wait for next 500ms tick)
+    attemptReveal();
   });
   // Listen for countdown (host resolves at same time as clients)
   roomRef.child('countdown').on('value',snap=>{
@@ -1720,8 +1832,14 @@ async function mpHostFetch(){
           // Reset ONLINE players' ready, clear hot seat, and notify
           Object.entries(S.mpPlayers).forEach(([pid,p])=>{if(p.online!==false)roomRef.child('players/'+pid+'/ready').set(false)});
           roomRef.child('hotSeatPick').remove();
-          roomRef.child('pendingPitch').set({n:pn,t:Date.now()});
-          setPred(true);resetPitchState();
+          // Set the reveal timestamp = now + globalDelay (spoiler shield)
+          revealTimestamp=Date.now()+globalDelay;
+          myPickLocked=false;
+          $('mpWaitingOverlay').classList.remove('show');
+          roomRef.child('pendingPitch').set({n:pn,t:Date.now(),revealAt:revealTimestamp});
+          // Restart the attemptReveal loop for this new pitch
+          startAttemptRevealLoop();
+          setPred(true);resetPitchState();showWagerIfMP();
           $('statusBar').textContent='\uD83D\uDCE1 Pitch #'+pn+' \u2014 make your picks!';$('statusBar').className='status-bar';
         }
       }
@@ -1735,6 +1853,10 @@ async function mpHostFetch(){
 // CLIENT: listen to Firebase for everything
 function mpClientStart(){
   let clientPitchNum=0;
+  // Listen for host's globalDelay setting
+  roomRef.child('globalDelay').on('value',snap=>{
+    const d=snap.val();if(d!=null)globalDelay=d*1000;
+  });
   roomRef.child('gameState').on('value',snap=>{const gs=snap.val();if(gs)mpApplyGameState(gs)});
   roomRef.child('pendingPitch').on('value',snap=>{
     const pp=snap.val();if(!pp)return;
@@ -1742,19 +1864,17 @@ function mpClientStart(){
     midAtBatLocked=false;
     $('hotSeatReveal').classList.remove('show');
     $('mpSyncBar').classList.remove('show');
+    $('mpWaitingOverlay').classList.remove('show');
+    myPickLocked=false;
+    // Set reveal timestamp from host's broadcast (or calculate from delay)
+    revealTimestamp=pp.revealAt||Date.now()+globalDelay;
     mpState='LIVE_PITCH';
-    setPred(true);resetPitchState();
+    setPred(true);resetPitchState();showWagerIfMP();
     $('statusBar').textContent='\uD83D\uDCE1 Pitch #'+pp.n+' \u2014 make your picks!';$('statusBar').className='status-bar';
   });
   roomRef.child('countdown').on('value',snap=>{const cd=snap.val();if(cd&&cd.p)triggerPitchSequence(cd.p)});
   roomRef.child('players').on('value',snap=>{
     S.mpPlayers=snap.val()||{};renderRoomPlayers();renderMPScores();
-    // Show ready count progress
-    const total=Object.keys(S.mpPlayers).length;
-    const ready=Object.values(S.mpPlayers).filter(p=>p.ready===true).length;
-    if(ready>0&&ready<total&&mpState==='LIVE_PITCH'){
-      $('statusBar').textContent='\u2705 '+ready+'/'+total+' players ready...';
-    }
   });
   // Sync check: detect if client falls behind host's pitch count
   roomRef.child('hostPitchNum').on('value',snap=>{
@@ -1899,8 +2019,10 @@ function triggerPitchSequence(pitch){
   mpCountdownActive=true;mpState='COUNTDOWN';
   if(mpCountdownTimer){clearInterval(mpCountdownTimer);mpCountdownTimer=null}
 
-  // Disable ALL inputs during countdown, hide wager
+  // Disable ALL inputs during countdown, hide wager + waiting overlay
   setPred(false);hideWager();
+  $('mpWaitingOverlay').classList.remove('show');myPickLocked=false;
+  if(attemptRevealTimer){clearInterval(attemptRevealTimer);attemptRevealTimer=null}
   document.querySelectorAll('.pred-btn,.ab-btn,.ptype-btn').forEach(b=>b.disabled=true);
   if(S.userPick&&!pitchLocked)lockPitchPick();
   if(navigator.vibrate)navigator.vibrate([100,50,100]);
