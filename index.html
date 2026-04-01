@@ -4989,7 +4989,7 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('beforeunload',()=>{if(S.userScore>0){saveLB();saveUserStats()}});
 // ── Desktop sidebar: full-featured ──
 let hotPickStats={Ball:{correct:0,total:0},Strike:{correct:0,total:0},Foul:{correct:0,total:0},Out:{correct:0,total:0},Hit:{correct:0,total:0},Homer:{correct:0,total:0}};
-let socialPulseItems=[];
+var socialPulseItems=[];
 let lastSidebarPitchType='';
 
 function addSocialPulse(icon,text,cls){
