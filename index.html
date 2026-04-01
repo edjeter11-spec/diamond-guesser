@@ -744,12 +744,11 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
   </div>
   <!-- MP Dugout (3rd/4th place) -->
   <div class="mp-dugout" id="mpDugout"><div class="mp-dugout-header">&#9917; Dugout</div><div id="mpDugoutList"></div></div>
-  <!-- Host Delay Slider (Synced Reveal) -->
+  <!-- Delay Slider (any player can adjust for everyone) -->
   <div class="mp-delay-bar" id="mpDelayBar">
-    <label>&#128250; Spoiler Shield</label>
+    <label>&#128250; TV Delay</label>
     <input type="range" id="mpDelaySlider" min="0" max="60" value="5">
     <div class="mdv" id="mpDelayVal">5s</div>
-    <div class="md-hint">Match your TV delay — pitch stays hidden until timer + all picks are in</div>
   </div>
   <!-- Waiting Overlay (early pickers) -->
   <div class="mp-waiting-overlay" id="mpWaitingOverlay">
@@ -1302,6 +1301,10 @@ function joinRoom(code,isHost,isRejoin){
     const pc=snap.val();if(pc)roomPlayerCount=pc;
     renderSlotGrid();updateRoomStartBtn();
   });
+  // Sync delay slider from Firebase (any player can change it)
+  roomRef.child('globalDelay').on('value',snap=>{
+    const d=snap.val();if(d!=null){globalDelay=d*1000;$('mpDelaySlider').value=d;$('mpDelayVal').textContent=d+'s'}
+  });
   // Listen for player changes
   let prevPlayerCount=Object.keys(S.mpPlayers).length;
   roomRef.child('players').on('value',snap=>{
@@ -1732,9 +1735,9 @@ function startGame(gameId,away,home,awayId,homeId){
     // Show MP additions alongside solo layout
     $('mpScores').style.display='';
     $('mpSpotlight').classList.add('show');
-    // Hide solo TV delay bar, show MP spoiler shield instead
+    // Hide solo TV delay bar, show MP delay slider for all players
     document.querySelector('.delay-bar').style.display='none';
-    $('mpDelayBar').classList.toggle('show',S.isHost);
+    $('mpDelayBar').classList.add('show');
     mpSendScore();mpState='WAITING';mpHostPitchNum=0;mpRallyStreaks={};
     $('mpSyncBar').classList.remove('show');$('mpWaitingOverlay').classList.remove('show');
     myPickLocked=false;revealTimestamp=0;
@@ -1785,8 +1788,8 @@ if($('mpDelaySlider')){
   $('mpDelaySlider').addEventListener('input',function(){
     globalDelay=parseInt(this.value)*1000;
     $('mpDelayVal').textContent=this.value+'s';
-    // Broadcast to Firebase so clients know the delay
-    if(roomRef&&S.isHost)roomRef.child('globalDelay').set(parseInt(this.value));
+    // ANY player can change the delay for everyone
+    if(roomRef)roomRef.child('globalDelay').set(parseInt(this.value));
   });
 }
 
@@ -1996,7 +1999,7 @@ function mpClientStart(){
   let clientPitchNum=0;
   // Listen for host's globalDelay setting
   roomRef.child('globalDelay').on('value',snap=>{
-    const d=snap.val();if(d!=null)globalDelay=d*1000;
+    const d=snap.val();if(d!=null){globalDelay=d*1000;$('mpDelaySlider').value=d;$('mpDelayVal').textContent=d+'s'}
   });
   roomRef.child('gameState').on('value',snap=>{const gs=snap.val();if(gs)mpApplyGameState(gs)});
   let lastHandledPendingPitch=0;
@@ -2075,12 +2078,10 @@ function mpApplyGameState(gs){
     midAtBatLocked=false;
     if(S.isHost&&roomRef)roomRef.child('midAtBatLocked').set(false);
     appliedPitches.clear();appliedAtBats.clear();
-    // Only wipe pitch state if user hasn't already locked a pick for this new batter
-    if(!pitchLocked){
-      S.userPick='';
-      resetPitchState();
-      setPred(true);
-    }
+    // ALWAYS reset pitch state for new batter — unlock everything
+    S.userPick='';pitchLocked=false;
+    resetPitchState();
+    setPred(true);
     // Always reset at-bat for new batter
     abReset();
     S.atBatPick='';S.atBatRbiPick=false;S.atBatResolved=0;
@@ -2205,26 +2206,18 @@ function triggerPitchSequence(pitch){
   $('hotSeatReveal').classList.remove('show');
   $('mpSyncBar').classList.remove('show');
 
-  // Show full-screen overlay
-  const overlay=$('pitchOverlay');
-  const countEl=$('poCount');
-  overlay.classList.add('show');
-
+  // Status bar countdown (no full-screen overlay — keeps everything visible)
   let sec=3;
-  countEl.textContent='3';
-  $('statusBar').textContent='\uD83D\uDD25 PITCH REVEAL IN 3...';$('statusBar').className='status-bar countdown';
+  $('statusBar').textContent='\uD83D\uDD25 3...';$('statusBar').className='status-bar countdown';
 
   mpCountdownTimer=setInterval(()=>{
     sec--;
     if(sec>0){
-      countEl.textContent=String(sec);
-      $('statusBar').textContent='\uD83D\uDD25 PITCH REVEAL IN '+sec+'...';
+      $('statusBar').textContent='\uD83D\uDD25 '+sec+'...';
     }else if(sec===0){
-      countEl.innerHTML='<span class="po-pitch">\u26BE</span>';
-      $('statusBar').textContent='\u26BE HERE COMES THE PITCH!';
+      $('statusBar').textContent='\u26BE PITCH!';
     }else{
       clearInterval(mpCountdownTimer);mpCountdownTimer=null;
-      overlay.classList.remove('show');
       mpCountdownActive=false;
       mpState='REVEAL';
 
@@ -3911,12 +3904,19 @@ function toggleWager(doubleDown){
   if(roomRef)roomRef.child('players/'+S.playerId+'/wager').set(doubleDown);
 }
 function showWagerIfMP(){
-  if(S.isMultiplayer&&Object.keys(S.mpPlayers).length>=2){
+  if(!S.isMultiplayer||Object.keys(S.mpPlayers).length<2){$('mpWager').classList.remove('show');return}
+  // Only show wager midway through game when it's "boring" (close scores or low action)
+  const pitchCount=S.pitchCount||0;
+  if(pitchCount<40){$('mpWager').classList.remove('show');return}// Too early
+  // Show every ~30 pitches, or when scores are close, or streaks are low
+  const sorted=Object.values(S.mpPlayers).sort((a,b)=>(b.score||0)-(a.score||0));
+  const scoreDiff=sorted.length>=2?Math.abs((sorted[0].score||0)-(sorted[1].score||0)):0;
+  const isClose=scoreDiff<50;
+  const isLowStreak=S.pitchStreak<=1&&S.abStreak<=1;
+  const showIt=(pitchCount%30<3&&isClose)||(pitchCount%50<3)||(isLowStreak&&pitchCount>60&&pitchCount%20<3);
+  if(showIt){
     $('mpWager').classList.add('show');
-    mpWagerActive=false;
-    $('wagerDD').classList.remove('active');
-    $('wagerSafe').classList.remove('active');
-    $('wagerStatus').textContent='';
+    mpWagerActive=false;$('wagerDD').classList.remove('active');$('wagerSafe').classList.remove('active');$('wagerStatus').textContent='';
   }else{$('mpWager').classList.remove('show')}
 }
 function hideWager(){$('mpWager').classList.remove('show')}
