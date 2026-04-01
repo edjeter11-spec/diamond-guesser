@@ -1493,12 +1493,16 @@ function makeGameCard(g,cls,pickMode){
     if(pickMode){
       if(S.isHost&&roomRef)roomRef.child('game').set({gameId:g.gamePk,away:aw.team.name,home:hm.team.name,awayId:awId,homeId:hmId});
       startGame(g.gamePk,aw.team.name,hm.team.name,awId,hmId);
+    }else if(soloModeActive){
+      // Solo mode active — start immediately, no second modal
+      S.isMultiplayer=false;S.isHost=false;soloModeActive=false;
+      startGame(g.gamePk,aw.team.name,hm.team.name,awId,hmId);
     }else{showModeModal(g.gamePk,aw.team.name,hm.team.name,awId,hmId)}
   });
   return card;
 }
 $('refreshGames').addEventListener('click',()=>loadGames());
-$('backBtn').addEventListener('click',()=>{stopGame();showScreen(S.isMultiplayer?'screenLobby':'screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString()});
+$('backBtn').addEventListener('click',()=>{stopGame();soloModeActive=false;showScreen(S.isMultiplayer?'screenLobby':'screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString()});
 
 /* ══════ GAME MODE MODAL ══════ */
 let pendingGame=null;
@@ -1518,10 +1522,22 @@ $('modalFriends').addEventListener('click',()=>{
 $('modalCancel').addEventListener('click',()=>{$('modeModal').classList.remove('show')});
 
 /* HOME MODE */
+let soloModeActive=false;// When true, clicking a game card starts solo immediately
 $('btnSoloMode').addEventListener('click',()=>{$('soloModal').classList.add('show')});
 $('soloLive').addEventListener('click',()=>{
   $('soloModal').classList.remove('show');S.isMultiplayer=false;S.isHost=false;
-  // Scroll to game list
+  soloModeActive=true;
+  // If there are live games, start the first one immediately
+  if(cachedGames&&cachedGames.length){
+    const live=cachedGames.find(g=>g.status.abstractGameState==='Live');
+    const game=live||cachedGames[0];
+    if(game){
+      const aw=game.teams.away,hm=game.teams.home;
+      startGame(game.gamePk,aw.team.name,hm.team.name,aw.team.id||0,hm.team.id||0);
+      return;
+    }
+  }
+  // No games loaded yet — scroll to list, cards will auto-start in solo mode
   document.querySelector('.game-list').scrollIntoView({behavior:'smooth'});
 });
 $('soloSim').addEventListener('click',()=>{
