@@ -277,6 +277,35 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
 .dbg-speed{background:var(--card2);color:var(--muted)}
 .dbg-speed.active{background:var(--blue);color:#fff}
 
+/* ── Stress Test Panel ── */
+.stress-panel{display:none;background:linear-gradient(135deg,#1a0a0a,#1a1a0a);border:1px solid #991b1b;border-radius:var(--radius);padding:10px;margin:4px 0}
+.stress-panel.show{display:block}
+.stress-panel h4{font-size:10px;color:#ef4444;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+.stress-log{max-height:180px;overflow-y:auto;font-family:'Courier New',monospace;font-size:9px;line-height:1.5;color:var(--text)}
+.stress-log .sl-ok{color:#4ade80}.stress-log .sl-err{color:#f87171;font-weight:700;background:rgba(239,68,68,0.1);padding:1px 3px;border-radius:2px}
+.stress-log .sl-warn{color:#fbbf24}.stress-log .sl-info{color:var(--muted)}
+.stress-log .sl-sync{color:#60a5fa}
+.stress-stats{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.stress-stats .ss{background:var(--card2);border-radius:6px;padding:4px 8px;font-size:9px;text-align:center}
+.stress-stats .ss .sv{font-size:14px;font-weight:900;color:var(--accent)}
+.stress-stats .ss .sl{font-size:7px;color:var(--muted);text-transform:uppercase}
+.stress-stats .ss.bad .sv{color:#ef4444}
+.stress-stats .ss.good .sv{color:#4ade80}
+
+/* Split-screen player panels */
+.stress-split{display:flex;gap:6px;margin:6px 0}
+.stress-player{flex:1;background:var(--card);border-radius:10px;padding:8px;border:1px solid #334155;min-width:0}
+.stress-player h5{font-size:9px;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:4px;text-align:center}
+.stress-player.sp-a{border-color:rgba(16,185,129,0.3)}.stress-player.sp-a h5{color:#4ade80}
+.stress-player.sp-b{border-color:rgba(59,130,246,0.3)}.stress-player.sp-b h5{color:#60a5fa}
+.sp-row{display:flex;justify-content:space-between;font-size:10px;padding:1px 0}
+.sp-row .sp-label{color:var(--muted)}.sp-row .sp-val{font-weight:700}
+.sp-pick{text-align:center;padding:4px;margin:3px 0;border-radius:6px;font-size:11px;font-weight:800;min-height:24px}
+.sp-pick.waiting{background:var(--card2);color:var(--muted)}
+.sp-pick.locked{background:rgba(245,158,11,0.15);color:var(--accent)}
+.sp-pick.correct{background:rgba(16,185,129,0.15);color:#4ade80}
+.sp-pick.wrong{background:rgba(239,68,68,0.15);color:#fca5a5}
+
 /* ── Notification prompt ── */
 .notif-banner{display:none;background:linear-gradient(135deg,#1e3a5f,#0f3460);border-radius:var(--radius);padding:12px;text-align:center;margin:4px 0;border:1px solid rgba(59,130,246,0.3)}
 .notif-banner.show{display:block}
@@ -608,6 +637,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     <div class="nb-hint">Works best when added to your home screen</div>
   </div>
   <button id="btnDebugSim" style="width:100%;border:none;border-radius:var(--radius);padding:10px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--muted);margin-top:-4px;transition:transform .1s" onclick="startDebugSim()">&#128736; Debug Sim (2 AI Players)</button>
+  <button id="btnStressTest" style="display:none;width:100%;border:none;border-radius:var(--radius);padding:10px;font-size:12px;font-weight:700;cursor:pointer;background:#450a0a;color:#fca5a5;margin-top:4px;transition:transform .1s" onclick="startStressTest()">&#9889; Live Stress Test (2 AI + Real Game)</button>
   <div class="game-list">
     <div class="game-list-header"><h2>Today's Games</h2><button class="refresh-btn" id="refreshGames">Refresh</button></div>
     <div id="gamesList"></div>
@@ -900,6 +930,32 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-s
     </div>
     <div class="debug-stats" id="debugStats"></div>
     <div class="debug-log" id="debugLog"></div>
+  </div>
+
+  <!-- Stress Test Panel -->
+  <div class="stress-panel" id="stressPanel">
+    <h4><span>&#9889; LIVE Stress Test</span><span id="stressStatus" style="font-size:9px;font-weight:400;color:var(--muted)"></span></h4>
+    <!-- Side-by-side player view -->
+    <div class="stress-split">
+      <div class="stress-player sp-a">
+        <h5>&#9899; Player A</h5>
+        <div class="sp-pick waiting" id="spPickA">Waiting...</div>
+        <div class="sp-row"><span class="sp-label">Score</span><span class="sp-val" id="spScoreA">0</span></div>
+        <div class="sp-row"><span class="sp-label">Streak</span><span class="sp-val" id="spStreakA">0</span></div>
+        <div class="sp-row"><span class="sp-label">Accuracy</span><span class="sp-val" id="spAccA">0%</span></div>
+        <div class="sp-pick waiting" id="spAbA" style="font-size:9px">AB: ---</div>
+      </div>
+      <div class="stress-player sp-b">
+        <h5>&#9899; Player B (CPU)</h5>
+        <div class="sp-pick waiting" id="spPickB">Waiting...</div>
+        <div class="sp-row"><span class="sp-label">Score</span><span class="sp-val" id="spScoreB">0</span></div>
+        <div class="sp-row"><span class="sp-label">Streak</span><span class="sp-val" id="spStreakB">0</span></div>
+        <div class="sp-row"><span class="sp-label">Accuracy</span><span class="sp-val" id="spAccB">0%</span></div>
+        <div class="sp-pick waiting" id="spAbB" style="font-size:9px">AB: ---</div>
+      </div>
+    </div>
+    <div class="stress-stats" id="stressStats"></div>
+    <div class="stress-log" id="stressLog"></div>
   </div>
 
   <!-- League scores ticker -->
@@ -2699,6 +2755,7 @@ function scoreCall(pick,cc,pr,b,s){
 
 function resolvePitch(p){
   drawPitch(p);updatePitchInfo(p);$('ptypeRow').classList.remove('open');
+  const savedPick=S.userPick||'';// Save before it gets cleared (for stress test)
   let uPts=0;const sit=getSitMult();
   if(S.userPick){
     uPts=scoreCall(S.userPick,p.callCode,p.playResult,p.countBalls,p.countStrikes);
@@ -2748,6 +2805,19 @@ function resolvePitch(p){
   // Auto-clear zone on ball in play (D=in play, E=in play+runs, X=in play+out)
   if(p.callCode==='D'||p.callCode==='E'||p.callCode==='X'){
     setTimeout(()=>{clearZone();renderCountDots(0,0,S.currentOuts)},1500);
+  }
+  // Stress test: update split-screen panels after resolve
+  if(stressTest.active){
+    const uGot=uPts>0;
+    $('spPickA').textContent=(uGot?'\u2705':'\u274C')+' '+savedPick+' '+(uGot?'+'+uPts:'+0');
+    $('spPickA').className='sp-pick '+(uGot?'correct':'wrong');
+    // CPU result
+    const cGot=(!S.isMultiplayer&&S.cpuPick)?scoreCall(S.cpuPick,p.callCode,p.playResult,p.countBalls,p.countStrikes)>0:false;
+    if(cGot){stressBotCorrect++;stressBotStreak++}else{stressBotStreak=0}
+    stressBotTotal++;
+    $('spPickB').textContent=(cGot?'\u2705':'\u274C')+' '+stressBotPick+' '+(cGot?'+pts':'+0');
+    $('spPickB').className='sp-pick '+(cGot?'correct':'wrong');
+    setTimeout(stressUpdatePanels,2000);
   }
   S.userPick='';S.cpuPick='';S.rbiPick=false;S.rbiPickCPU=false;S.pitchTypePick='';S.pitchTypeCPU='';
   resetPitchState();
@@ -4158,6 +4228,234 @@ setTimeout(showNotifBanner,2000);
 
 // Check permission on load
 if(checkNotifSupport()&&Notification.permission==='granted')notifEnabled=true;
+
+/* ══════════════════════════════════════
+   LIVE STRESS TEST — 2 AI on real game
+   ══════════════════════════════════════ */
+let stressTest={active:false,timer:null,pitchesProcessed:0,errors:[],
+  syncErrors:0,doubleHits:0,skippedPitches:0,scoreMismatches:0,
+  spoilerLeaks:0,lastPitchNum:0,lastScoreA:0,lastScoreB:0,
+  revealTimes:[],pickTimes:[],startTime:0};
+
+// Hidden dev mode: tap home title 5 times
+let devTapCount=0;let devTapTimer=null;
+document.addEventListener('click',e=>{
+  if(e.target.closest('.home-hero h1')){
+    devTapCount++;
+    if(devTapTimer)clearTimeout(devTapTimer);
+    devTapTimer=setTimeout(()=>{devTapCount=0},2000);
+    if(devTapCount>=5){
+      devTapCount=0;
+      $('btnStressTest').style.display=$('btnStressTest').style.display==='none'?'block':'none';
+    }
+  }
+});
+
+function stressLog(type,msg){
+  const el=document.createElement('div');
+  el.className='sl-'+type;
+  el.textContent='['+new Date().toLocaleTimeString()+'] '+msg;
+  $('stressLog').appendChild(el);
+  $('stressLog').scrollTop=$('stressLog').scrollHeight;
+  if(type==='err')stressTest.errors.push(msg);
+}
+
+function updateStressStats(){
+  const t=stressTest;
+  const elapsed=((Date.now()-t.startTime)/1000).toFixed(0);
+  $('stressStats').innerHTML=`
+    <div class="ss"><div class="sv">${t.pitchesProcessed}</div><div class="sl">Pitches</div></div>
+    <div class="ss${t.syncErrors?' bad':' good'}"><div class="sv">${t.syncErrors}</div><div class="sl">Sync Errors</div></div>
+    <div class="ss${t.doubleHits?' bad':' good'}"><div class="sv">${t.doubleHits}</div><div class="sl">Double Hits</div></div>
+    <div class="ss${t.skippedPitches?' bad':' good'}"><div class="sv">${t.skippedPitches}</div><div class="sl">Skipped</div></div>
+    <div class="ss${t.spoilerLeaks?' bad':' good'}"><div class="sv">${t.spoilerLeaks}</div><div class="sl">Spoiler Leaks</div></div>
+    <div class="ss${t.scoreMismatches?' bad':' good'}"><div class="sv">${t.scoreMismatches}</div><div class="sl">Score Bugs</div></div>
+    <div class="ss"><div class="sv">${elapsed}s</div><div class="sl">Runtime</div></div>
+    <div class="ss"><div class="sv">${t.errors.length}</div><div class="sl">Total Bugs</div></div>
+  `;
+}
+
+// Track Player B (CPU) picks for split-screen display
+let stressBotPick='',stressBotAB='',stressBotCorrect=0,stressBotTotal=0,stressBotStreak=0;
+
+// Auto-pick: simulate both players making instant picks
+function stressAutoPick(){
+  if(!stressTest.active||!S.gameActive)return;
+  // Only pick if predictions are enabled (pitch pending)
+  if(!S.userPick&&!pitchLocked&&!$('btnBall').disabled){
+    const pickStart=Date.now();
+    const picks=['Ball','Strike','Foul','Out','Single','Homer'];
+    const pick=picks[Math.floor(Math.random()*picks.length)];
+    predict(pick);
+    stressTest.pickTimes.push(Date.now()-pickStart);
+    // Update Player A panel
+    $('spPickA').textContent='\uD83C\uDFAF '+pick;
+    $('spPickA').className='sp-pick locked';
+    stressLog('sync','Player_A: '+pick+' ('+stressTest.pickTimes[stressTest.pickTimes.length-1]+'ms)');
+    // Player B (CPU) pick is auto-generated by lockPitchPick — show it
+    if(S.cpuPick){
+      stressBotPick=S.cpuPick;
+      $('spPickB').textContent='\uD83C\uDFAF '+S.cpuPick;
+      $('spPickB').className='sp-pick locked';
+      stressLog('sync','Player_B: '+S.cpuPick);
+    }
+  }
+  // Auto at-bat pick if not locked
+  if(!S.atBatPick&&abState==='open'&&S.gameActive){
+    const abPicks=['Strikeout','Walk','Groundout','Flyout','Single','Double','Home Run'];
+    const abPick=abPicks[Math.floor(Math.random()*abPicks.length)];
+    S.atBatPick=abPick;
+    document.querySelectorAll('.ab-btn').forEach(b=>b.classList.remove('sel'));
+    const abBtn=document.querySelector('.ab-btn[data-ab="'+abPick+'"]');
+    if(abBtn)abBtn.classList.add('sel');
+    if(!inInningBreak)abLock();
+    $('spAbA').textContent='AB: '+abPick;$('spAbA').className='sp-pick locked';
+    if(S.atBatCPU){stressBotAB=S.atBatCPU;$('spAbB').textContent='AB: '+S.atBatCPU;$('spAbB').className='sp-pick locked'}
+    stressLog('sync','Player_A AB: '+abPick+(S.atBatCPU?' | Player_B AB: '+S.atBatCPU:''));
+  }
+}
+
+// Update split-screen panels after each pitch resolves
+function stressUpdatePanels(){
+  // Player A = user
+  $('spScoreA').textContent=S.userScore;
+  $('spStreakA').textContent=S.streak+(S.streak>=2?' \uD83D\uDD25':'');
+  const accA=S.totalPredictions?Math.round(S.correctCount/S.totalPredictions*100):0;
+  $('spAccA').textContent=accA+'%';
+  // Player B = CPU
+  $('spScoreB').textContent=S.cpuScore;
+  $('spStreakB').textContent=stressBotStreak+(stressBotStreak>=2?' \uD83D\uDD25':'');
+  $('spAccB').textContent=stressBotTotal?Math.round(stressBotCorrect/stressBotTotal*100)+'%':'0%';
+  // Reset pick displays for next pitch
+  $('spPickA').textContent='Waiting...';$('spPickA').className='sp-pick waiting';
+  $('spPickB').textContent='Waiting...';$('spPickB').className='sp-pick waiting';
+  $('spAbA').textContent='AB: ---';$('spAbA').className='sp-pick waiting';
+  $('spAbB').textContent='AB: ---';$('spAbB').className='sp-pick waiting';
+}
+
+// Monitor pitch sequence for skips/dupes
+function stressCheckPitch(pitchNum){
+  if(pitchNum<=0)return;
+  if(pitchNum===stressTest.lastPitchNum){
+    stressTest.doubleHits++;
+    stressLog('err','DOUBLE HIT: Pitch #'+pitchNum+' processed twice!');
+  }else if(pitchNum>stressTest.lastPitchNum+1&&stressTest.lastPitchNum>0){
+    const skipped=pitchNum-stressTest.lastPitchNum-1;
+    stressTest.skippedPitches+=skipped;
+    stressLog('err','SKIPPED: '+skipped+' pitch(es) between #'+stressTest.lastPitchNum+' and #'+pitchNum);
+  }
+  stressTest.lastPitchNum=pitchNum;
+  stressTest.pitchesProcessed++;
+}
+
+// Check if spoiler shield leaked (result shown before delay expired)
+function stressCheckSpoilerShield(){
+  if(revealTimestamp>0&&Date.now()<revealTimestamp&&mpCountdownActive){
+    stressTest.spoilerLeaks++;
+    stressLog('err','SPOILER LEAK: Countdown started '+Math.ceil((revealTimestamp-Date.now())/1000)+'s before delay expired!');
+  }
+}
+
+// Check leaderboard consistency
+function stressCheckScores(){
+  const sorted=Object.entries(S.mpPlayers).map(([id,p])=>({...p,id})).sort((a,b)=>(b.score||0)-(a.score||0));
+  if(sorted.length>=1){
+    const a=sorted[0];
+    // Score should never decrease
+    if(a.score<stressTest.lastScoreA&&stressTest.lastScoreA>0){
+      stressTest.scoreMismatches++;
+      stressLog('err','SCORE BUG: Player score decreased from '+stressTest.lastScoreA+' to '+a.score);
+    }
+    stressTest.lastScoreA=a.score||0;
+  }
+}
+
+async function startStressTest(){
+  $('btnStressTest').textContent='Finding live game...';
+  try{
+    // Find a LIVE game
+    const today=new Date();
+    const ds=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+    const r=await fetch('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+ds+'&hydrate=linescore');
+    const sched=await r.json();
+    const games=(sched.dates&&sched.dates[0]&&sched.dates[0].games)||[];
+    let liveGame=games.find(g=>g.status.abstractGameState==='Live');
+    if(!liveGame){
+      // No live game — fall back to practice sim mode
+      stressLog('warn','No live games — falling back to yesterday\'s completed game');
+      const d2=new Date();d2.setDate(d2.getDate()-1);
+      const ds2=d2.getFullYear()+'-'+String(d2.getMonth()+1).padStart(2,'0')+'-'+String(d2.getDate()).padStart(2,'0');
+      const r2=await fetch('https://statsapi.mlb.com/api/v1/schedule?sportId=1&date='+ds2+'&hydrate=linescore');
+      const sched2=await r2.json();
+      const games2=(sched2.dates&&sched2.dates[0]&&sched2.dates[0].games)||[];
+      liveGame=games2.find(g=>g.status.abstractGameState==='Final');
+      if(!liveGame){$('btnStressTest').textContent='No games found';return}
+    }
+
+    const gId=liveGame.gamePk;
+    const away=liveGame.teams.away.team.name,home=liveGame.teams.home.team.name;
+    const awayId=liveGame.teams.away.team.id,homeId=liveGame.teams.home.team.id;
+
+    // Reset stress test state
+    stressTest={active:true,timer:null,pitchesProcessed:0,errors:[],
+      syncErrors:0,doubleHits:0,skippedPitches:0,scoreMismatches:0,
+      spoilerLeaks:0,lastPitchNum:0,lastScoreA:0,lastScoreB:0,
+      revealTimes:[],pickTimes:[],startTime:Date.now()};
+
+    // Start as solo (not MP) so we control everything locally
+    S.isMultiplayer=false;S.isHost=false;
+    startGame(gId,away,home,awayId,homeId);
+
+    $('stressPanel').classList.add('show');
+    $('stressLog').innerHTML='';
+    $('stressStatus').textContent='LIVE';
+    $('btnStressTest').textContent='\u26A1 Live Stress Test (2 AI + Real Game)';
+
+    stressLog('info','=== STRESS TEST STARTED ===');
+    stressLog('info','Game: '+away+' vs '+home+' ('+gId+')');
+    stressLog('info','Mode: '+liveGame.status.abstractGameState);
+    stressLog('info','Auto-picking for Player_A + CPU (Player_B)');
+    updateStressStats();
+
+    // Hook into the game loop — auto-pick every 500ms
+    stressTest.timer=setInterval(()=>{
+      if(!stressTest.active||!S.gameActive){stopStressTest();return}
+      stressAutoPick();
+      stressCheckScores();
+      stressCheckSpoilerShield();
+      updateStressStats();
+
+      // Check pitch sequence via pitchCount
+      if(S.pitchCount>0)stressCheckPitch(S.pitchCount);
+    },500);
+
+  }catch(e){
+    stressLog('err','FATAL: '+e.message);
+    $('btnStressTest').textContent='Error: '+e.message;
+  }
+}
+
+function stopStressTest(){
+  stressTest.active=false;
+  if(stressTest.timer){clearInterval(stressTest.timer);stressTest.timer=null}
+  const t=stressTest;
+  const elapsed=((Date.now()-t.startTime)/1000).toFixed(1);
+  stressLog('info','=== STRESS TEST COMPLETE ===');
+  stressLog('info','Runtime: '+elapsed+'s | Pitches: '+t.pitchesProcessed);
+  stressLog('info','Sync Errors: '+t.syncErrors+' | Double Hits: '+t.doubleHits+' | Skipped: '+t.skippedPitches);
+  stressLog('info','Spoiler Leaks: '+t.spoilerLeaks+' | Score Bugs: '+t.scoreMismatches);
+  stressLog(t.errors.length?'err':'ok','Total bugs found: '+t.errors.length);
+  if(t.pickTimes.length){
+    const avgPick=Math.round(t.pickTimes.reduce((a,b)=>a+b,0)/t.pickTimes.length);
+    stressLog('sync','Avg pick latency: '+avgPick+'ms');
+  }
+  if(t.errors.length){
+    stressLog('err','--- BUG SUMMARY ---');
+    t.errors.forEach((e,i)=>stressLog('err',(i+1)+'. '+e));
+  }
+  $('stressStatus').textContent='DONE — '+t.errors.length+' bugs';
+  updateStressStats();
+}
 
 /* ══════════════════════════════════════
    LEAGUE SCORES COLLAPSE IN MP
