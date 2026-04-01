@@ -4486,18 +4486,25 @@ function stressCheckSpoilerShield(){
   }
 }
 
-// Check leaderboard consistency
+// Check leaderboard consistency — verify my local score matches what Firebase shows
 function stressCheckScores(){
-  const sorted=Object.entries(S.mpPlayers).map(([id,p])=>({...p,id})).sort((a,b)=>(b.score||0)-(a.score||0));
-  if(sorted.length>=1){
-    const a=sorted[0];
-    // Score should never decrease
-    if(a.score<stressTest.lastScoreA&&stressTest.lastScoreA>0){
+  if(!S.isMultiplayer)return;
+  const me=S.mpPlayers[S.playerId];
+  if(!me)return;
+  // My local score should match what I've sent to Firebase
+  if(me.score!==undefined&&Math.abs(me.score-S.userScore)>0&&S.userScore>0){
+    // Only flag if both are non-zero and differ (score update may be in flight)
+    if(me.score>0&&Math.abs(me.score-S.userScore)>50){
       stressTest.scoreMismatches++;
-      stressLog('err','SCORE BUG: Player score decreased from '+stressTest.lastScoreA+' to '+a.score);
+      stressLog('err','SCORE DESYNC: Local='+S.userScore+' Firebase='+me.score);
     }
-    stressTest.lastScoreA=a.score||0;
   }
+  // Score should never decrease
+  if(S.userScore<stressTest.lastScoreA&&stressTest.lastScoreA>0){
+    stressTest.scoreMismatches++;
+    stressLog('err','SCORE BUG: Score decreased from '+stressTest.lastScoreA+' to '+S.userScore);
+  }
+  stressTest.lastScoreA=S.userScore;
 }
 
 // ── GAME PICKER + DUAL VIEW ──
@@ -4560,16 +4567,21 @@ function pickGameForStress(idx){
   const state=g.status.abstractGameState;
   const isFinal=state==='Final';
 
+  // Generate a shared room code so both iframes connect to the SAME Firebase room
+  const stressRoomCode='DBG'+Math.random().toString(36).slice(2,6).toUpperCase();
+
   // Open dual view with two iframes
   $('dualView').classList.add('show');
-  $('dualGameLabel').textContent=away+' vs '+home+' ('+state+')';
+  $('dualGameLabel').textContent=away+' vs '+home+' ('+state+') — Room: '+stressRoomCode;
 
-  // Build URL params for each player
+  // Build URL params — both share the same room code
   const base=window.location.origin+window.location.pathname;
-  const params='?stressGame='+gId+'&away='+encodeURIComponent(away)+'&home='+encodeURIComponent(home)+'&awayId='+g.teams.away.team.id+'&homeId='+g.teams.home.team.id+(isFinal?'&mode=sim':'&mode=live');
+  const shared='?stressGame='+gId+'&away='+encodeURIComponent(away)+'&home='+encodeURIComponent(home)+'&awayId='+g.teams.away.team.id+'&homeId='+g.teams.home.team.id+'&room='+stressRoomCode+(isFinal?'&mode=sim':'&mode=live');
 
-  $('dualFrameA').src=base+params+'&player=A';
-  $('dualFrameB').src=base+params+'&player=B';
+  // Player A = host (launches first), Player B = client (joins after small delay)
+  $('dualFrameA').src=base+shared+'&player=A&role=host';
+  // Delay B slightly so A creates the room first
+  setTimeout(()=>{$('dualFrameB').src=base+shared+'&player=B&role=client'},2000);
 }
 
 function closeDualView(){
@@ -4591,61 +4603,115 @@ function checkStressUrlParams(){
   const homeId=parseInt(params.get('homeId'))||0;
   const mode=params.get('mode')||'live';
   const player=params.get('player')||'A';
+  const role=params.get('role')||'host';
+  const roomCode=params.get('room')||'';
 
-  // Auto-start after auth completes (called from onAuthStateChanged)
   S.playerName='Bot_'+player;
-  setTimeout(async()=>{
 
-    if(mode==='sim'){
-      // Simulation: load game data and run practice mode
-      try{
-        const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+gId+'/feed/live');
-        const gd=await r.json();
-        practiceGameData=gd;
-        const allPlays=gd.liveData.plays.allPlays||[];
-        practicePitches=extractPracticeData(allPlays);
-        practiceMode=true;S.isMultiplayer=false;
-        startGame(gId,away,home,awayId,homeId);
-        clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
-        S.gameActive=true;
-        $('practiceBadge').classList.add('show');
-        $('gameTime').textContent='\uD83D\uDD27 Stress Bot '+player+': '+away+' vs '+home;
-        // Set to fast auto mode
-        practiceSpeed=3000;
-        $('practiceControls').classList.remove('show');
-        // Show stress panel
-        $('stressPanel').classList.add('show');$('stressLog').innerHTML='';
-        stressTest={active:true,timer:null,pitchesProcessed:0,errors:[],syncErrors:0,doubleHits:0,skippedPitches:0,scoreMismatches:0,spoilerLeaks:0,lastPitchNum:0,lastScoreA:0,lastScoreB:0,revealTimes:[],pickTimes:[],startTime:Date.now(),processedPitches:new Set(),lastCheckedPitchCount:0};
-        stressLog('info','Bot '+player+' started on '+away+' vs '+home);
-        updateStressStats();
-        // Auto-pick loop
-        stressTest.timer=setInterval(()=>{
-          if(!stressTest.active||!S.gameActive){stopStressTest();return}
-          stressAutoPick();stressCheckScores();updateStressStats();
-          stressPollPitchCount();
-        },500);
-        // Auto-advance practice pitches
-        let simTimer=setInterval(()=>{
-          if(!S.gameActive||practiceIdx>=practicePitches.length){clearInterval(simTimer);return}
-          practiceNextPitch();
-        },2500);
-      }catch(e){console.error('Stress sim error:',e)}
+  setTimeout(async()=>{
+    // Show stress panel
+    $('stressPanel').classList.add('show');$('stressLog').innerHTML='';
+    stressTest={active:true,timer:null,pitchesProcessed:0,errors:[],syncErrors:0,doubleHits:0,skippedPitches:0,scoreMismatches:0,spoilerLeaks:0,lastPitchNum:0,lastScoreA:0,lastScoreB:0,revealTimes:[],pickTimes:[],startTime:Date.now(),processedPitches:new Set(),lastCheckedPitchCount:0};
+
+    if(roomCode){
+      // ── REAL MULTIPLAYER via Firebase room ──
+      // This is identical to 2 humans playing — same room, same sync, same scoring
+      stressLog('info','Bot '+player+' ('+role+') joining room '+roomCode);
+      stressLog('info','Game: '+away+' vs '+home+' ('+gId+') — Mode: '+mode);
+
+      if(role==='host'){
+        // HOST: create room, add self, then start the game
+        roomRef=db.ref('rooms/'+roomCode);
+        await roomRef.set({
+          host:S.playerId,created:Date.now(),playerCount:2,
+          players:{[S.playerId]:{name:S.playerName,score:0,streak:0,pitchStreak:0,abStreak:0,isHost:true,online:true,joinedAt:Date.now()}}
+        });
+        joinRoom(roomCode,true,false);
+        stressLog('ok','Room created: '+roomCode);
+
+        // Wait for Player B to join before starting
+        const waitForB=()=>new Promise(resolve=>{
+          const check=setInterval(()=>{
+            const count=Object.keys(S.mpPlayers).length;
+            if(count>=2){clearInterval(check);resolve()}
+          },500);
+          // Timeout after 10s
+          setTimeout(()=>{clearInterval(check);resolve()},10000);
+        });
+        stressLog('info','Waiting for Bot B to join...');
+        await waitForB();
+        stressLog('ok',Object.keys(S.mpPlayers).length+' players in room');
+
+        if(mode==='sim'){
+          // Load game data and start practice together
+          try{
+            const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+gId+'/feed/live');
+            const gd=await r.json();
+            practiceGameData=gd;
+            const allPlays=gd.liveData.plays.allPlays||[];
+            practicePitches=extractPracticeData(allPlays);
+            if(!practicePitches.length){stressLog('err','No pitch data found');return}
+            stressLog('ok','Loaded '+practicePitches.length+' pitches');
+
+            practiceMode=true;
+            startGame(gId,away,home,awayId,homeId);
+            clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
+            S.gameActive=true;
+            $('practiceBadge').classList.add('show');
+            $('practiceControls').classList.remove('show');
+            $('gameTime').textContent='\uD83D\uDD27 Bot '+player+' (HOST): '+away+' vs '+home;
+
+            // Broadcast practice data for client
+            roomRef.child('practice').set({away,home,awayId,homeId,gamePk:gId,date:'',totalPitches:practicePitches.length,currentIdx:0});
+            mpPracticeStart();
+          }catch(e){stressLog('err','Failed to load game: '+e.message)}
+        }else{
+          // Live: pick this game and start
+          roomRef.child('game').set({gameId:gId,away,home,awayId,homeId});
+          $('gameTime').textContent='\uD83D\uDD27 Bot '+player+' (HOST LIVE): '+away+' vs '+home;
+        }
+
+      }else{
+        // CLIENT: join existing room
+        const ref=db.ref('rooms/'+roomCode);
+        // Wait for room to exist
+        let attempts=0;
+        while(attempts<20){
+          const snap=await ref.once('value');
+          if(snap.exists())break;
+          await new Promise(r=>setTimeout(r,500));
+          attempts++;
+        }
+        ref.child('players/'+S.playerId).set({name:S.playerName,score:0,streak:0,pitchStreak:0,abStreak:0,isHost:false,online:true,joinedAt:Date.now()});
+        joinRoom(roomCode,false,false);
+        stressLog('ok','Joined room '+roomCode+' as client');
+        $('gameTime').textContent='\uD83D\uDD27 Bot '+player+' (CLIENT): '+away+' vs '+home;
+
+        // Client just listens — game starts when host broadcasts it
+        // Set up practice listener so sim mode works
+        setupPracticeListener();
+      }
+
     }else{
-      // Live mode
+      // No room code — fallback to solo mode (legacy)
+      stressLog('warn','No room code — running solo (not true MP test)');
       S.isMultiplayer=false;
       startGame(gId,away,home,awayId,homeId);
-      $('gameTime').textContent='\uD83D\uDD27 Stress Bot '+player+' (LIVE): '+away+' vs '+home;
-      $('stressPanel').classList.add('show');$('stressLog').innerHTML='';
-      stressTest={active:true,timer:null,pitchesProcessed:0,errors:[],syncErrors:0,doubleHits:0,skippedPitches:0,scoreMismatches:0,spoilerLeaks:0,lastPitchNum:0,lastScoreA:0,lastScoreB:0,revealTimes:[],pickTimes:[],startTime:Date.now()};
-      stressLog('info','Bot '+player+' LIVE on '+away+' vs '+home);
-      updateStressStats();
-      stressTest.timer=setInterval(()=>{
-        if(!stressTest.active||!S.gameActive){stopStressTest();return}
-        stressAutoPick();stressCheckScores();updateStressStats();
-        if(S.pitchCount>0)stressCheckPitch(S.pitchCount);
-      },500);
+      $('gameTime').textContent='\uD83D\uDD27 Stress Bot '+player+' (SOLO): '+away+' vs '+home;
     }
-  },1000);
+
+    // Start auto-pick loop regardless of mode
+    stressLog('info','Auto-pick loop started');
+    updateStressStats();
+    stressTest.timer=setInterval(()=>{
+      if(!stressTest.active||!S.gameActive){stopStressTest();return}
+      stressAutoPick();
+      stressCheckScores();
+      updateStressStats();
+      stressPollPitchCount();
+    },500);
+
+  },1500);// Delay to let Firebase auth complete
 
   return true;
 }
