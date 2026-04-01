@@ -1490,19 +1490,18 @@ async function tryRejoinRoom(){
 function mpCheckReady(){
   if(!S.isMultiplayer||!roomRef)return;
   const pitchReady=!!S.userPick&&pitchLocked;
-  const abReady=abState==='locked'||abState==='result';
-  if(pitchReady&&abReady){
+  // Ready = pitch is locked. At-bat is OPTIONAL (player might not have picked one yet)
+  // This prevents the "1/2 ready" hang when at-bat buttons are stuck or skipped
+  if(pitchReady){
     roomRef.child('players/'+S.playerId+'/ready').set(true);
-    playPop();
-    if(navigator.vibrate)navigator.vibrate(30);
-    // Mark this player as locked in — show waiting overlay
+    if(!myPickLocked)playPop();// Only pop on first lock
+    if(navigator.vibrate&&!myPickLocked)navigator.vibrate(30);
     myPickLocked=true;
-    // Hot seat: if I'm the hot seat player and 3+ people, broadcast my pitch pick
+    // Hot seat
     const hotSeat=getHotSeatPlayer();
     if(hotSeat&&hotSeat.id===S.playerId&&Object.keys(S.mpPlayers).length>=3){
       roomRef.child('hotSeatPick').set({playerId:S.playerId,name:S.playerName,pick:S.userPick,t:Date.now()});
     }
-    // Trigger an immediate check of both gates (host will also check via poll)
     attemptReveal();
   }
 }
@@ -1832,8 +1831,12 @@ function attemptReveal(){
 
   // ── THE DOUBLE GATE ──
   // BOTH conditions must be true to reveal
-  if(timerReady&&allReady){
-    // Clear the polling timer
+  // Safety: if stuck at "ready" for 15+ seconds, force-proceed (timeout fallback)
+  const stuckTime=revealTimestamp>0?(now-(revealTimestamp)):0;
+  const forceTimeout=stuckTime>15000&&readyCount>=1&&total>=2;
+
+  if((timerReady&&allReady)||forceTimeout){
+    if(forceTimeout)console.warn('[attemptReveal] Force-proceeding after 15s stuck at '+readyCount+'/'+total+' ready');
     if(attemptRevealTimer){clearInterval(attemptRevealTimer);attemptRevealTimer=null}
     myPickLocked=false;
     $('mpWaitingOverlay').classList.remove('show');
@@ -2594,13 +2597,21 @@ function predict(choice){
   const btnMap={Ball:'btnBall',Strike:'btnStrike',Foul:'btnFoul',Out:'btnOut',Homer:'btnHomer',Single:'btnHit',Double:'btnHit',Triple:'btnHit'};
   if(btnMap[choice])$(btnMap[choice]).classList.add('sel');
   if(navigator.vibrate)navigator.vibrate(20);
-  // If at-bat is already locked, auto-lock pitch immediately (all modes)
+
+  // In multiplayer: auto-lock pitch immediately after selection (no waiting for at-bat)
+  // This prevents the "1/2 ready" hang and the "buttons re-opening" bug
+  if(S.isMultiplayer){
+    lockPitchPick();
+    return;
+  }
+
+  // Solo: if at-bat is already locked, auto-lock pitch immediately
   const hasAB=abState==='locked'||abState==='result';
   if(hasAB){
     lockPitchPick();
     return;
   }
-  // At-bat not yet locked: show pitch type row and wait
+  // Solo at-bat not yet locked: show pitch type row and wait
   $('ptypeRow').classList.add('open');
   const lbl=choice+(S.rbiPick?' +RBI':'');
   $('statusBar').textContent='\uD83C\uDFAF '+lbl+' selected \u2014 pick at-bat to lock in';$('statusBar').className='status-bar';
