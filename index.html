@@ -22,7 +22,9 @@
 :root{--bg:#0a0e1a;--card:#111827;--card2:#1a2332;--accent:#f59e0b;--accent2:#10b981;--red:#ef4444;--blue:#3b82f6;--text:#f1f5f9;--muted:#64748b;--radius:14px;--safe-top:env(safe-area-inset-top,0px);--safe-bot:env(safe-area-inset-bottom,0px);--font-head:'Chakra Petch','Segoe UI',sans-serif;--font-body:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;--glass:rgba(17,24,39,0.7);--glass-border:rgba(255,255,255,0.06)}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;background:var(--bg)}
-body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;padding:calc(8px + var(--safe-top)) 8px calc(8px + var(--safe-bot));-webkit-tap-highlight-color:transparent;user-select:none;overflow-x:hidden}
+.mini-auth{position:fixed;top:0;left:0;right:0;z-index:200;height:24px;display:flex;align-items:center;justify-content:center;background:rgba(10,14,26,0.92);font-size:10px;font-weight:600;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,0.04);gap:8px}
+.mini-auth a,.mini-auth span{cursor:pointer;transition:color .15s}.mini-auth a:hover,.mini-auth span:hover{color:var(--accent)}
+body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;padding:calc(32px + var(--safe-top)) 8px calc(8px + var(--safe-bot));-webkit-tap-highlight-color:transparent;user-select:none;overflow-x:hidden}
 .screen{display:none;flex-direction:column;gap:10px;max-width:500px;margin:0 auto;width:100%}.screen.active{display:flex}
 
 /* AUTH */
@@ -650,6 +652,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
 </style>
 </head>
 <body>
+<div class="mini-auth" id="miniAuth"><span id="miniAuthText" style="color:var(--muted)" onclick="showScreen('screenAuth')">Sign In</span></div>
 <div class="desktop-wrapper">
 
 <!-- LEFT SIDEBAR (desktop only) -->
@@ -1224,6 +1227,9 @@ auth.onAuthStateChanged(async(user)=>{
     $('balVal').textContent=userBalance.toLocaleString();
     $('logoutBtn').style.display=isGuest?'none':'';
     $('homeBalance').style.display='';
+    // Mini auth bar
+    $('miniAuthText').innerHTML=S.playerName+(isGuest?'':' <span style="color:var(--muted);margin-left:4px" onclick="event.stopPropagation();auth.signOut()">Log Out</span>');
+    $('miniAuthText').onclick=null;
     // Check if launched as stress test iframe
     if(checkStressUrlParams()){renderHomeLB();loadGames();return}
     // Try to rejoin an active multiplayer room (page reload)
@@ -1234,6 +1240,9 @@ auth.onAuthStateChanged(async(user)=>{
     currentUser=null;userBalance=0;
     showScreen('screenAuth');
     $('authLoginBtn').textContent='Log In';$('authSignupBtn').textContent='Create Account';$('authGuestBtn').textContent='Continue as Guest';
+    // Mini auth bar
+    $('miniAuthText').innerHTML='Sign In';
+    $('miniAuthText').onclick=()=>showScreen('screenAuth');
   }
 });
 
