@@ -1229,8 +1229,18 @@ auth.onAuthStateChanged(async(user)=>{
     $('homeBalance').style.display='';
     // Mini auth bar
     $('miniAuthText').textContent=S.playerName;
-    $('miniAuthText').onclick=null;$('miniAuthText').style.cursor='default';
-    $('miniLogout').style.display=isGuest?'none':'inline';
+    if(isGuest){
+      // Guest: show "Sign In" link so they can upgrade to a real account
+      $('miniAuthText').style.cursor='default';$('miniAuthText').onclick=null;
+      $('miniLogout').style.display='inline';
+      $('miniLogout').textContent='Sign In';
+      $('miniLogout').onclick=()=>{firebase.auth().signOut()};
+    }else{
+      $('miniAuthText').style.cursor='default';$('miniAuthText').onclick=null;
+      $('miniLogout').style.display='inline';
+      $('miniLogout').textContent='Log Out';
+      $('miniLogout').onclick=()=>{firebase.auth().signOut()};
+    }
     // Check if launched as stress test iframe
     if(checkStressUrlParams()){renderHomeLB();loadGames();return}
     // Try to rejoin an active multiplayer room (page reload)
