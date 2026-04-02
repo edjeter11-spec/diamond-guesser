@@ -2331,10 +2331,14 @@ function mpApplyGameState(gs){
 let mpState='WAITING'; // WAITING | COUNTDOWN | LIVE_PITCH | REVEAL
 let mpHostPitchNum=0; // Track host's pitch count for sync
 
+let _countdownSavedPick='';// Preserve pick through countdown in case batter-change wipes it
 function triggerPitchSequence(pitch){
   if(mpCountdownActive)return;
   mpCountdownActive=true;mpState='COUNTDOWN';
   if(mpCountdownTimer){clearInterval(mpCountdownTimer);mpCountdownTimer=null}
+
+  // SAVE the user's pick before anything can wipe it
+  _countdownSavedPick=S.userPick||'';
 
   // Disable ALL inputs during countdown, hide wager + waiting overlay
   setPred(false);hideWager();
@@ -2366,6 +2370,9 @@ function triggerPitchSequence(pitch){
       mpCountdownActive=false;
       mpState='REVEAL';
 
+      // Restore saved pick in case batter-change wiped it during countdown
+      if(!S.userPick&&_countdownSavedPick){S.userPick=_countdownSavedPick;pitchLocked=true}
+      _countdownSavedPick='';
       resolvePitch(pitch);
       mpHostPitchNum=pitch.pitchNum||mpHostPitchNum;
 
@@ -3093,9 +3100,14 @@ function resolvePitch(p){
     $('spPickB').className='sp-pick '+(cGot?'correct':'wrong');
     setTimeout(stressUpdatePanels,2000);
   }
-  S.userPick='';S.cpuPick='';S.rbiPick=false;S.rbiPickCPU=false;S.pitchTypePick='';S.pitchTypeCPU='';
-  resetPitchState();
-  if(!S.gamePaused)setPred(true);
+  // Only clear picks if the user hasn't already selected their NEXT pick
+  // (prevents wiping a selection made during the countdown for the previous pitch)
+  if(!pitchLocked&&!pitchLockTimer){
+    S.userPick='';S.rbiPick=false;S.pitchTypePick='';
+    resetPitchState();
+    if(!S.gamePaused)setPred(true);
+  }
+  S.cpuPick='';S.rbiPickCPU=false;S.pitchTypeCPU='';
   setTimeout(()=>{$('statusBar').className='status-bar';if(!S.userPick&&S.gameActive&&!S.gamePaused)$('statusBar').textContent='\uD83C\uDFAF Make your call!'},2500);
 }
 
