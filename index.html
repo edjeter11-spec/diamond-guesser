@@ -679,6 +679,10 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
     <h4>&#128293; Hot Picks</h4>
     <div id="dsHotPicks" class="ds-empty">Play a game to see your hot picks</div>
   </div>
+  <div class="ds-card">
+    <h4>&#129504; AI Tips</h4>
+    <div id="dsAiTips" style="font-size:11px;line-height:1.5;color:var(--text)"></div>
+  </div>
 </aside>
 
 <!-- MAIN CONTENT -->
@@ -722,6 +726,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
     <div class="bal-name" id="balName">Player</div>
     <div class="bal-label">Total Points</div>
     <div class="bal-val" id="balVal">0</div>
+    <div id="homeStats" style="display:flex;gap:8px;justify-content:center;margin-top:8px;flex-wrap:wrap"></div>
     <div id="homeLB" style="text-align:left;margin-top:12px;border-top:1px solid rgba(255,255,255,0.1);padding-top:10px"></div>
   </div>
   <div class="home-actions">
@@ -1118,6 +1123,10 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
       <button onclick="$('btnFriendsMode').click()" style="border:none;border-radius:8px;padding:10px;font-size:12px;font-weight:700;font-family:var(--font-head);cursor:pointer;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;transition:all .15s">Play with Friends</button>
     </div>
   </div>
+  <div class="ds-card">
+    <h4>&#128101; Friends</h4>
+    <div id="dsFriends" class="ds-empty">Play with someone to add them here</div>
+  </div>
 </aside>
 
 </div><!-- /desktop-wrapper -->
@@ -1220,11 +1229,24 @@ auth.onAuthStateChanged(async(user)=>{
     // Load balance from Firebase
     const snap=await db.ref('users/'+user.uid).once('value');
     const data=snap.val();
-    if(data){userBalance=data.balance||0}
-    else{await db.ref('users/'+user.uid).set({name:S.playerName,balance:0,gamesPlayed:0,bestStreak:0,created:Date.now()});userBalance=0}
+    if(data){userBalance=data.balance||0;S.bestStreak=data.bestStreak||0;S.correctCount=data.totalCorrect||0;S.totalPredictions=data.totalPredictions||0}
+    else{await db.ref('users/'+user.uid).set({name:S.playerName,balance:0,gamesPlayed:0,bestStreak:0,totalCorrect:0,totalPredictions:0,created:Date.now()});userBalance=0}
     // Update home screen
     $('balName').textContent=S.playerName+(isGuest?' (Guest)':'');
     $('balVal').textContent=userBalance.toLocaleString();
+    // Personalized stats
+    const gp=data?data.gamesPlayed||0:0;
+    const acc=S.totalPredictions>0?Math.round(S.correctCount/S.totalPredictions*100):0;
+    const lvlPts=userBalance;
+    const lvl=lvlPts>=10000?'MVP':lvlPts>=5000?'All-Star':lvlPts>=1000?'Pro':'Rookie';
+    const statStyle='background:rgba(255,255,255,0.06);border-radius:8px;padding:6px 10px;text-align:center;min-width:60px';
+    const valStyle='font-family:var(--font-head);font-size:16px;font-weight:800;color:var(--accent)';
+    const lblStyle='font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:700';
+    $('homeStats').innerHTML=
+      '<div style="'+statStyle+'"><div style="'+valStyle+'">'+gp+'</div><div style="'+lblStyle+'">Games</div></div>'+
+      '<div style="'+statStyle+'"><div style="'+valStyle+'">'+S.bestStreak+'</div><div style="'+lblStyle+'">Best Streak</div></div>'+
+      '<div style="'+statStyle+'"><div style="'+valStyle+'">'+acc+'%</div><div style="'+lblStyle+'">Accuracy</div></div>'+
+      '<div style="'+statStyle+'"><div style="'+valStyle+'">'+lvl+'</div><div style="'+lblStyle+'">Level</div></div>';
     $('logoutBtn').style.display=isGuest?'none':'';
     $('homeBalance').style.display='';
     // Mini auth bar
@@ -1270,6 +1292,9 @@ function saveUserStats(){
   db.ref('users/'+currentUser.uid).update({
     gamesPlayed:firebase.database.ServerValue.increment(1),
     bestStreak:Math.max(S.bestStreak,0),
+    totalCorrect:S.correctCount||0,
+    totalPredictions:S.totalPredictions||0,
+    accuracy:S.totalPredictions>0?Math.round(S.correctCount/S.totalPredictions*100):0,
     lastPlayed:Date.now()
   });
 }
@@ -2886,7 +2911,24 @@ function resolveAtBat(event,rbi){
   let uPts=0,cPts=0;
   const sit=getSitMult();
   if(S.atBatPick){
-    if(S.atBatPick===ev)uPts=AB_SCORES[ev]||30;
+    const pk=S.atBatPick;
+    if(pk===ev)uPts=AB_SCORES[ev]||30;
+    // ── PARTIAL CREDIT for close at-bat predictions ──
+    else{
+      const isHit=ev==='Single'||ev==='Double'||ev==='Triple'||ev==='Home Run';
+      const isOut=ev==='Strikeout'||ev==='Groundout'||ev==='Flyout';
+      const pickHit=pk==='Single'||pk==='Double'||pk==='Triple'||pk==='Home Run';
+      const pickOut=pk==='Strikeout'||pk==='Groundout'||pk==='Flyout';
+      // Called a hit and it WAS a hit (just wrong type) — half the actual hit value
+      if(pickHit&&isHit)uPts=Math.round((AB_SCORES[ev]||30)*0.4);
+      // Called an out and it WAS an out (just wrong type) — partial out credit
+      else if(pickOut&&isOut)uPts=Math.round((AB_SCORES[ev]||20)*0.4);
+      // Called strikeout and it was any out — you knew they were getting out
+      else if(pk==='Strikeout'&&isOut)uPts=8;
+      // Called homer and it was a hit — at least it was in play
+      else if(pk==='Home Run'&&isHit)uPts=Math.round((AB_SCORES[ev]||30)*0.3);
+      // Called walk and it was HBP — already mapped to Walk, handled above
+    }
     if(S.atBatRbiPick&&rbi>0)uPts+=40;
     if(uPts>0){
       uPts=Math.round(uPts*sit.mult);
@@ -2943,6 +2985,7 @@ function classifyPitchType(code){
    ══════════════════════════════════════ */
 function scoreCall(pick,cc,pr,b,s){
   let base=0;
+  // ── EXACT matches (full points) ──
   if(pick==='Ball'&&cc==='B')base=5;
   else if(pick==='Strike'&&(cc==='C'||cc==='S'||cc==='T'))base=10;
   else if(pick==='Foul'&&cc==='F')base=15;
@@ -2950,8 +2993,22 @@ function scoreCall(pick,cc,pr,b,s){
   else if(pick==='Single'&&cc==='D'&&pr==='Single')base=60;
   else if(pick==='Double'&&cc==='D'&&pr==='Double')base=120;
   else if(pick==='Triple'&&cc==='D'&&pr==='Triple')base=250;
-  else if((pick==='Single'||pick==='Double'||pick==='Triple')&&cc==='D')base=15;
   else if(pick==='Homer'&&cc==='E')base=200;
+  // ── PARTIAL CREDIT (close but not exact) ──
+  // Strike/Foul are adjacent — reward for being close
+  else if(pick==='Strike'&&cc==='F')base=5;// Called strike, was foul (close — both swinging)
+  else if(pick==='Foul'&&(cc==='C'||cc==='S'||cc==='T'))base=5;// Called foul, was strike
+  // Called any hit type and it WAS a hit (just wrong type) — reward for reading the hit
+  else if(pick==='Single'&&cc==='D'&&(pr==='Double'||pr==='Triple'))base=20;// Called single, was bigger hit
+  else if(pick==='Double'&&cc==='D'&&(pr==='Single'||pr==='Triple'))base=20;// Called double, was different hit
+  else if(pick==='Triple'&&cc==='D'&&(pr==='Single'||pr==='Double'))base=20;// Called triple, was different hit
+  else if((pick==='Single'||pick==='Double'||pick==='Triple')&&cc==='D')base=15;// Hit type, ball in play (generic)
+  // Called homer, it was a hit (not quite but in the ballpark)
+  else if(pick==='Homer'&&cc==='D')base=10;// Called homer, was a hit (at least in play)
+  // Called strike/foul and it was a swinging strikeout in play
+  else if(pick==='Strike'&&cc==='X'&&pr&&pr.includes('Strikeout'))base=5;
+  // Called out and it was a foul out
+  else if(pick==='Out'&&cc==='F')base=5;// Foul out counts as partial out credit
   if(base===0)return 0;
   if(pick==='Ball'||pick==='Strike'||pick==='Foul')base=Math.round(base*getCountMult(pick,b,s));
   return base;
@@ -3333,6 +3390,15 @@ function showEndGame(){
   $('egSubtitle').textContent=S.awayTeam+' vs '+S.homeTeam;
   $('endgameOverlay').classList.add('show');
   playSound('homer');
+  // Save friends from MP session
+  if(S.isMultiplayer&&S.mpPlayers){
+    const sorted=Object.entries(S.mpPlayers).map(([id,p])=>({...p,id})).sort((a,b)=>(b.score||0)-(a.score||0));
+    const myIdx=sorted.findIndex(p=>p.id===S.playerId);
+    sorted.forEach((p,i)=>{
+      if(p.id===S.playerId)return;
+      saveFriend(p.name,myIdx<i);// won = I'm ranked higher
+    });
+  }
 }
 
 /* ══════════════════════════════════════
@@ -4951,6 +5017,51 @@ function updateDesktopSidebars(){
     }).join('');
   }
 }
+// ── AI Tips rotation ──
+const aiTips=[
+  'On a 3-0 count, pitchers throw fastballs 70% of the time — bet Strike.',
+  'With 2 strikes, look for breaking balls — sliders and curves spike.',
+  'Runners on 2nd + 3rd? Pitchers pitch around the batter — expect Balls.',
+  'First pitch of an at-bat is a strike ~60% of the time.',
+  'Left-handed batters see more inside breaking balls from RHP.',
+  'Full count (3-2)? Anything goes — trust your gut.',
+  'High-velocity fastballs (95+) are harder to foul — call Strike or Ball.',
+  'With 2 outs, runners are going on contact — more In Play results.',
+  'Closers rely on one pitch — learn their go-to for easy points.',
+  'Down in the count? Batters protect the plate — more Fouls.',
+  'In late innings, tired pitchers throw more Balls. Cash in.',
+  'If the pitcher just walked someone, expect a Strike on the next batter.',
+];
+let aiTipIdx=0;
+function rotateAiTips(){
+  const el=$('dsAiTips');if(!el)return;
+  el.innerHTML='<div style="margin-bottom:4px;font-size:9px;color:var(--accent);font-weight:700">TIP #'+(aiTipIdx+1)+'</div>'+aiTips[aiTipIdx];
+  aiTipIdx=(aiTipIdx+1)%aiTips.length;
+}
+rotateAiTips();setInterval(rotateAiTips,12000);
+
+// ── Friends history (stored in localStorage, synced per user) ──
+function getFriends(){return JSON.parse(localStorage.getItem('dg_friends_'+(currentUser?currentUser.uid:'guest'))||'[]')}
+function saveFriend(name,won){
+  const friends=getFriends();
+  const existing=friends.find(f=>f.name===name);
+  if(existing){existing.games++;if(won)existing.wins++;else existing.losses++;existing.lastPlayed=Date.now()}
+  else{friends.push({name,games:1,wins:won?1:0,losses:won?0:1,lastPlayed:Date.now()})}
+  localStorage.setItem('dg_friends_'+(currentUser?currentUser.uid:'guest'),JSON.stringify(friends));
+  renderFriends();
+}
+function renderFriends(){
+  const el=$('dsFriends');if(!el)return;
+  const friends=getFriends();
+  if(!friends.length){el.innerHTML='<div class="ds-empty">Play with someone to add them here</div>';return}
+  el.innerHTML=friends.sort((a,b)=>b.lastPlayed-a.lastPlayed).slice(0,6).map(f=>{
+    const record=f.wins+'W-'+f.losses+'L';
+    const pct=f.games?Math.round(f.wins/f.games*100):0;
+    return'<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03)"><span style="font-weight:700">'+f.name+'</span><span style="color:var(--muted);font-size:9px">'+record+' ('+pct+'%)</span></div>';
+  }).join('');
+}
+renderFriends();
+
 // Update sidebars periodically
 setInterval(updateDesktopSidebars,3000);
 
