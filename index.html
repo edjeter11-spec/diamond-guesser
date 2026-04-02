@@ -763,7 +763,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
     </div>
     <div class="nb-hint">Works best when added to your home screen</div>
   </div>
-  <button id="btnDebugSim" style="width:100%;border:none;border-radius:var(--radius);padding:10px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--muted);margin-top:-4px;transition:transform .1s" onclick="startDebugSim()">&#128736; Debug Sim (2 AI Players)</button>
+  <button id="btnDebugSim" style="display:none;width:100%;border:none;border-radius:var(--radius);padding:10px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--muted);margin-top:-4px;transition:transform .1s" onclick="startDebugSim()">&#128736; Debug Sim (2 AI Players)</button>
   <button id="btnStressTest" style="display:none;width:100%;border:none;border-radius:var(--radius);padding:10px;font-size:12px;font-weight:700;cursor:pointer;background:#450a0a;color:#fca5a5;margin-top:4px;transition:transform .1s" onclick="startStressTest()">&#9889; Live Stress Test (2 AI + Real Game)</button>
   <div class="game-list">
     <div class="game-list-header"><h2>Today's Games</h2><button class="refresh-btn" id="refreshGames">Refresh</button></div>
@@ -1292,8 +1292,8 @@ auth.onAuthStateChanged(async(user)=>{
     if(checkStressUrlParams()){renderHomeLB();loadGames();return}
     // Try to rejoin an active multiplayer room (page reload)
     const rejoined=await tryRejoinRoom();
-    if(!rejoined){showScreen('screenHome');renderHomeLB();loadGames()}
-    else{renderHomeLB();loadGames()}
+    if(!rejoined){showScreen('screenHome');renderHomeLB();loadGames();rotateAiTips()}
+    else{renderHomeLB();loadGames();rotateAiTips()}
   }else{
     currentUser=null;userBalance=0;
     showScreen('screenAuth');
@@ -4583,7 +4583,9 @@ document.addEventListener('click',e=>{
     devTapTimer=setTimeout(()=>{devTapCount=0},2000);
     if(devTapCount>=5){
       devTapCount=0;
-      $('btnStressTest').style.display=$('btnStressTest').style.display==='none'?'block':'none';
+      const show=$('btnDebugSim').style.display==='none'?'block':'none';
+      $('btnDebugSim').style.display=show;
+      $('btnStressTest').style.display=show;
     }
   }
 });
