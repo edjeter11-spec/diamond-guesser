@@ -1501,7 +1501,7 @@ function makeGameCard(g,cls,pickMode){
   return card;
 }
 $('refreshGames').addEventListener('click',()=>loadGames());
-$('backBtn').addEventListener('click',()=>{stopGame();showScreen(S.isMultiplayer?'screenLobby':'screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString()});
+$('backBtn').addEventListener('click',()=>{stopGame();showScreen(S.isMultiplayer?'screenLobby':'screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString();refreshHomeStats()});
 
 /* ══════ GAME MODE MODAL ══════ */
 let pendingGame=null;
@@ -3535,7 +3535,7 @@ function updateStreakUI(){
 /* ══════════════════════════════════════
    END-OF-GAME SUMMARY
    ══════════════════════════════════════ */
-$('egClose').addEventListener('click',()=>{$('endgameOverlay').classList.remove('show');if(S.isMultiplayer)mpDisconnect(true);showScreen('screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString();$('pctlEnd').style.display='none';practiceMode=false});
+$('egClose').addEventListener('click',()=>{$('endgameOverlay').classList.remove('show');if(S.isMultiplayer)mpDisconnect(true);showScreen('screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString();$('pctlEnd').style.display='none';practiceMode=false;refreshHomeStats()});
 function showEndGame(){
   const total=S.totalPredictions||0;const correct=S.correctCount||0;
   $('egScore').textContent=S.userScore;
@@ -5522,6 +5522,40 @@ function updateDesktopSidebars(){
     }).join('');
   }
 }
+// ── Refresh home stats from Firebase after game ends ──
+async function refreshHomeStats(){
+  if(!currentUser)return;
+  try{
+    const snap=await db.ref('users/'+currentUser.uid).once('value');
+    const data=snap.val();if(!data)return;
+    userBalance=data.balance||0;
+    S.bestStreak=Math.max(S.bestStreak,data.bestStreak||0);
+    const gp=data.gamesPlayed||0;
+    const tc=data.totalCorrect||S.correctCount||0;
+    const tp=data.totalPredictions||S.totalPredictions||0;
+    const acc=tp>0?Math.round(tc/tp*100):0;
+    const lvl=userBalance>=10000?'MVP':userBalance>=5000?'All-Star':userBalance>=1000?'Pro':'Rookie';
+    // Update balance
+    $('balVal').textContent=userBalance.toLocaleString();
+    // Update homeStats cards
+    const statStyle='background:rgba(255,255,255,0.06);border-radius:8px;padding:6px 10px;text-align:center;min-width:60px';
+    const valStyle='font-family:var(--font-head);font-size:16px;font-weight:800;color:var(--accent)';
+    const lblStyle='font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:700';
+    $('homeStats').innerHTML=
+      '<div style="'+statStyle+'"><div style="'+valStyle+'">'+gp+'</div><div style="'+lblStyle+'">Games</div></div>'+
+      '<div style="'+statStyle+'"><div style="'+valStyle+'">'+S.bestStreak+'</div><div style="'+lblStyle+'">Best Streak</div></div>'+
+      '<div style="'+statStyle+'"><div style="'+valStyle+'">'+acc+'%</div><div style="'+lblStyle+'">Accuracy</div></div>'+
+      '<div style="'+statStyle+'"><div style="'+valStyle+'">'+lvl+'</div><div style="'+lblStyle+'">Level</div></div>';
+    // Update home card trends
+    const ha=$('homeAcc');if(ha)ha.textContent=acc+'%';
+    const hs=$('homeStreak');if(hs)hs.textContent=S.bestStreak||0;
+    // Update mini auth bar
+    const tp2=$('tabPts');if(tp2)tp2.textContent=userBalance.toLocaleString()+' pts';
+    // Re-render streak calendar and badges
+    renderStreakCal();renderBadges();renderLeagueCard();
+  }catch(e){console.warn('refreshHomeStats error:',e)}
+}
+
 // ── Bot Population (fake players for active feel) ──
 const BOT_NAMES=['SluggerFan','AceHunter','DiamondEye','PitchPro','BBGenius','HRKing','StrikeZone','CurveMaster','FastballJoe','ClutchKing','RallyTime','BaseRunner','MoundKing','DugoutHero','GrandSlam'];
 const BOT_ACTIONS=[
