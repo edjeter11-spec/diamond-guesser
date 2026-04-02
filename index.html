@@ -652,7 +652,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
 </style>
 </head>
 <body>
-<div class="mini-auth" id="miniAuth"><span id="miniAuthText" style="color:var(--muted)" onclick="showScreen('screenAuth')">Sign In</span></div>
+<div class="mini-auth" id="miniAuth"><span id="miniAuthText" style="color:var(--muted);cursor:pointer" onclick="showScreen('screenAuth')">Sign In</span><span id="miniLogout" style="display:none;color:var(--muted);cursor:pointer;margin-left:6px" onclick="firebase.auth().signOut()">Log Out</span></div>
 <div class="desktop-wrapper">
 
 <!-- LEFT SIDEBAR (desktop only) -->
@@ -1228,8 +1228,9 @@ auth.onAuthStateChanged(async(user)=>{
     $('logoutBtn').style.display=isGuest?'none':'';
     $('homeBalance').style.display='';
     // Mini auth bar
-    $('miniAuthText').innerHTML=S.playerName+(isGuest?'':' <span style="color:var(--muted);margin-left:4px" onclick="event.stopPropagation();auth.signOut()">Log Out</span>');
-    $('miniAuthText').onclick=null;
+    $('miniAuthText').textContent=S.playerName;
+    $('miniAuthText').onclick=null;$('miniAuthText').style.cursor='default';
+    $('miniLogout').style.display=isGuest?'none':'inline';
     // Check if launched as stress test iframe
     if(checkStressUrlParams()){renderHomeLB();loadGames();return}
     // Try to rejoin an active multiplayer room (page reload)
@@ -1241,8 +1242,9 @@ auth.onAuthStateChanged(async(user)=>{
     showScreen('screenAuth');
     $('authLoginBtn').textContent='Log In';$('authSignupBtn').textContent='Create Account';$('authGuestBtn').textContent='Continue as Guest';
     // Mini auth bar
-    $('miniAuthText').innerHTML='Sign In';
-    $('miniAuthText').onclick=()=>showScreen('screenAuth');
+    $('miniAuthText').textContent='Sign In';
+    $('miniAuthText').onclick=()=>showScreen('screenAuth');$('miniAuthText').style.cursor='pointer';
+    $('miniLogout').style.display='none';
   }
 });
 
