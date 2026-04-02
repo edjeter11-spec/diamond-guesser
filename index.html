@@ -2031,6 +2031,8 @@ function startGame(gameId,away,home,awayId,homeId){
   }
 
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');startTicker();renderGameLB();
+  // Auto-show scout report
+  $('scoutBody').classList.add('show');scoutCache={};
   feedBuffer=[];firstFeedApplied=false;mpLastPitchNum=0;mpPendingPitch=null;mpCountdownActive=false;mpResultShowing=false;mpFirstFetch=true;midAtBatLocked=false;soloFirstExtract=true;
   clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
 
@@ -2723,6 +2725,9 @@ function applyDelayedFeed(d){
       const cd=$('countDisplay');if(cd)cd.innerHTML='<span>0</span>-<span>0</span> \u2022 '+S.currentOuts+' out';
       updateDynamicOdds(0,0);
       setPred(true);resetPitchState();
+      // Load scouting report for this matchup
+      const pId=cp.matchup.pitcher?cp.matchup.pitcher.id:0;
+      loadScoutReport(pId,batterId);
       $('statusBar').textContent='\uD83C\uDFAF New batter \u2014 make your call!';$('statusBar').className='status-bar';
     }
   }
@@ -5522,6 +5527,22 @@ function updateDesktopSidebars(){
     }).join('');
   }
 }
+// ── Social Pulse (activity feed) ──
+let socialPulseItems=[];
+function addSocialPulse(icon,text,cls){
+  const time=new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+  socialPulseItems.unshift({icon,text,time,cls:cls||''});
+  if(socialPulseItems.length>20)socialPulseItems.pop();
+  renderSocialPulse();
+}
+function renderSocialPulse(){
+  const el=$('dsActivity');if(!el)return;
+  if(!socialPulseItems.length){el.innerHTML='<div class="ds-empty">No recent activity</div>';return}
+  el.innerHTML=socialPulseItems.map(p=>
+    '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);font-size:10px;line-height:1.4"><span style="margin-right:3px">'+p.icon+'</span>'+p.text+'<span style="color:var(--muted);font-size:8px;float:right">'+p.time+'</span></div>'
+  ).join('');
+}
+
 // ── Refresh home stats from Firebase after game ends ──
 async function refreshHomeStats(){
   if(!currentUser)return;
