@@ -680,6 +680,46 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
 .quick-match-btn:active{transform:scale(0.97)}
 .quick-match-btn:disabled{opacity:0.5;cursor:default;transform:none}
 .qm-searching{text-align:center;padding:12px;font-size:12px;color:var(--muted);animation:readyPulse 1.5s ease-in-out infinite}
+
+/* ── Leagues ── */
+.league-card{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:var(--radius);padding:12px;border:1px solid var(--glass-border)}
+.league-card h4{font-family:var(--font-head);font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:6px}
+.lg-row{display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03)}
+.lg-row:last-child{border:none}
+.lg-row .lg-rank{min-width:20px;font-weight:700;color:var(--muted)}
+.lg-row .lg-name{flex:1}.lg-row .lg-pts{font-family:'Courier New',monospace;font-weight:800;color:var(--accent)}
+.lg-row.lg-me{color:var(--accent2)}
+.lg-code{font-family:var(--font-head);font-size:20px;font-weight:800;letter-spacing:6px;color:var(--accent);text-align:center;margin:4px 0}
+.lg-actions{display:flex;gap:6px;margin-top:6px}
+.lg-actions button{flex:1;border:none;border-radius:8px;padding:8px;font-size:10px;font-weight:700;font-family:var(--font-head);cursor:pointer;transition:all .15s}
+.lg-actions button:active{transform:scale(0.96)}
+.lg-create{background:linear-gradient(135deg,#10b981,#059669);color:#fff}
+.lg-join{background:var(--card2);color:var(--text);border:1px solid var(--glass-border)!important}
+
+/* ── Pregame Bets ── */
+.bets-card{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:var(--radius);padding:12px;border:1px solid var(--glass-border)}
+.bets-card h4{font-family:var(--font-head);font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:6px}
+.bet-row{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03);font-size:11px}
+.bet-row:last-child{border:none}
+.bet-team{flex:1;border:none;border-radius:6px;padding:6px;font-size:10px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--muted);transition:all .15s;text-align:center}
+.bet-team:active{transform:scale(0.96)}
+.bet-team.sel{background:var(--accent);color:#000}
+.bet-vs{font-size:9px;color:var(--muted);font-weight:700;flex-shrink:0}
+.bet-wager{display:flex;gap:3px}
+.bet-wager button{border:none;border-radius:4px;padding:3px 6px;font-size:9px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--muted);transition:all .1s}
+.bet-wager button.sel{background:var(--accent);color:#000}
+.bet-active{font-size:9px;color:var(--accent2);font-weight:700;padding:2px 6px;background:rgba(16,185,129,0.1);border-radius:4px}
+
+/* ── Scouting Report ── */
+.scout-card{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:var(--radius);padding:0;border:1px solid var(--glass-border);overflow:hidden;margin:4px 0}
+.scout-header{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;cursor:pointer;font-family:var(--font-head);font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:1px;font-weight:700}
+.scout-header:active{background:rgba(255,255,255,0.02)}
+.scout-body{display:none;padding:8px 12px}
+.scout-body.show{display:block}
+.scout-row{display:flex;justify-content:space-between;padding:2px 0;font-size:10px}
+.scout-row .sr-label{color:var(--muted)}.scout-row .sr-val{font-family:'Courier New',monospace;font-weight:800}
+.scout-section{font-size:8px;color:var(--accent);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin:4px 0 2px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.04)}
+.scout-section:first-child{border:none;margin-top:0;padding-top:0}
 </style>
 </head>
 <body>
@@ -807,6 +847,24 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
   <div class="badge-shelf" id="badgeShelf">
     <h4>&#127942; Achievements</h4>
     <div class="badge-grid" id="badgeGrid"></div>
+  </div>
+
+  <!-- My League -->
+  <div class="league-card" id="leagueCard">
+    <h4>&#127941; My League</h4>
+    <div id="leagueContent">
+      <div style="text-align:center;font-size:11px;color:var(--muted);padding:6px 0">Join or create a league to compete with friends</div>
+      <div class="lg-actions">
+        <button class="lg-create" onclick="promptCreateLeague()">Create League</button>
+        <button class="lg-join" onclick="promptJoinLeague()">Join League</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pregame Bets -->
+  <div class="bets-card" id="betsCard">
+    <h4>&#127920; Today's Picks</h4>
+    <div id="betsContent" style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0">Loading games...</div>
   </div>
 
   <div class="game-list">
@@ -941,6 +999,13 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
       <div class="count-display" id="countDisplay"></div>
     </div>
     <img class="matchup-img" id="batterImg" src="" alt="">
+  </div>
+  <!-- Scouting Report -->
+  <div class="scout-card" id="scoutCard">
+    <div class="scout-header" onclick="$('scoutBody').classList.toggle('show')"><span>&#128203; Scout Report</span><span id="scoutToggle">&#9660;</span></div>
+    <div class="scout-body" id="scoutBody">
+      <div id="scoutContent" style="font-size:10px;color:var(--muted);text-align:center">Select a game to see stats</div>
+    </div>
   </div>
 
   <!-- INNING BREAK / DUE UP -->
@@ -1338,8 +1403,8 @@ auth.onAuthStateChanged(async(user)=>{
     if(checkStressUrlParams()){renderHomeLB();loadGames();return}
     // Try to rejoin an active multiplayer room (page reload)
     const rejoined=await tryRejoinRoom();
-    if(!rejoined){showScreen('screenHome');renderHomeLB();loadGames();rotateAiTips();renderStreakCal();renderBadges()}
-    else{renderHomeLB();loadGames();rotateAiTips();renderStreakCal();renderBadges()}
+    if(!rejoined){showScreen('screenHome');renderHomeLB();loadGames().then(()=>{renderBets();checkBetResults()});rotateAiTips();renderStreakCal();renderBadges();renderLeagueCard();loadBets()}
+    else{renderHomeLB();loadGames().then(()=>{renderBets();checkBetResults()});rotateAiTips();renderStreakCal();renderBadges();renderLeagueCard();loadBets()}
   }else{
     currentUser=null;userBalance=0;
     showScreen('screenAuth');
@@ -2312,6 +2377,8 @@ function mpApplyGameState(gs){
     document.querySelector('.atbat-card-header span').textContent='\uD83C\uDFAF Predict the At-Bat';
     $('atbatResult').className='atbat-result';
     $('statusBar').textContent='\uD83C\uDFAF '+gs.batterName+' is up \u2014 make your call!';$('statusBar').className='status-bar';
+    // Load scouting report for new matchup
+    loadScoutReport(gs.pitcherId,gs.batterId);
   }else if(gs.batterId&&gs.batterId!==S.lastBatterId&&(mpCountdownActive||mpResultShowing)){
     // New batter detected but we're still showing results — defer, don't update yet
   }else{
@@ -3473,8 +3540,9 @@ function showEndGame(){
   $('egSubtitle').textContent=S.awayTeam+' vs '+S.homeTeam;
   $('endgameOverlay').classList.add('show');
   playSound('homer');
-  // Record daily play + check achievements
+  // Record daily play + check achievements + upload league score
   recordDailyPlay();
+  uploadLeagueScore(S.userScore,S.gameId);
   const acc=total>0?Math.round(correct/total*100):0;
   const wonMP=S.isMultiplayer&&S.mpPlayers&&Object.values(S.mpPlayers).sort((a,b)=>(b.score||0)-(a.score||0))[0]?.id===S.playerId;
   updateAchievementStats(S.userScore,acc,S.bestStreak,false,wonMP);
@@ -4134,6 +4202,13 @@ function startTicker(){
   loadTicker();tickerInterval=setInterval(loadTicker,30000);// refresh every 30s
 }
 function stopTicker(){if(tickerInterval){clearInterval(tickerInterval);tickerInterval=null}}
+function switchToGame(gameId,away,home,awayId,homeId){
+  if(S.isMultiplayer)return;// Only solo
+  if(gameId===S.gameId)return;
+  $('statusBar').textContent='\u26A1 Switching game...';$('statusBar').className='status-bar countdown';
+  stopGame();
+  setTimeout(()=>{S.isMultiplayer=false;S.isHost=false;startGame(gameId,away,home,awayId,homeId)},500);
+}
 async function loadTicker(){
   try{
     const d=new Date(),ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -4147,7 +4222,7 @@ async function loadTicker(){
       const isLive=st==='Live';const inn=ls.currentInning||'';const half=ls.inningHalf||'';
       let status=det;if(isLive&&inn)status=(half==='Top'?'\u25B2':'\u25BC')+inn;
       const awAbr=aw.team.name.split(' ').pop();const hmAbr=hm.team.name.split(' ').pop();
-      return`<div class="ticker-game${isLive?' tg-live':''}"><div class="tg-row"><span class="tg-team">${awAbr}</span><span class="tg-score">${aw.score!=null?aw.score:'-'}</span></div><div class="tg-row"><span class="tg-team">${hmAbr}</span><span class="tg-score">${hm.score!=null?hm.score:'-'}</span></div><div class="tg-status${isLive?' live':''}">${status}</div></div>`;
+      return`<div class="ticker-game${isLive?' tg-live':''}" style="cursor:pointer" onclick="switchToGame(${g.gamePk},'${aw.team.name.replace(/'/g,'')}','${hm.team.name.replace(/'/g,'')}',${aw.team.id||0},${hm.team.id||0})"><div class="tg-row"><span class="tg-team">${awAbr}</span><span class="tg-score">${aw.score!=null?aw.score:'-'}</span></div><div class="tg-row"><span class="tg-team">${hmAbr}</span><span class="tg-score">${hm.score!=null?hm.score:'-'}</span></div><div class="tg-status${isLive?' live':''}">${status}</div></div>`;
     }).join('');
   }catch(e){}
 }
@@ -5243,7 +5318,142 @@ async function startQuickMatch(){
   }
 }
 
-/* ══════════════════════════════��═══════
+/* ══════════════════════════════════════
+   PRIVATE LEAGUES
+   ══════════════════════════════════════ */
+let myLeagueCode=null;
+function getMyLeague(){return localStorage.getItem('dg_league_'+(currentUser?currentUser.uid:''))||null}
+function setMyLeague(code){myLeagueCode=code;if(currentUser)localStorage.setItem('dg_league_'+currentUser.uid,code||'')}
+
+function promptCreateLeague(){
+  const name=prompt('League name:');if(!name)return;
+  const code=genCode();
+  db.ref('leagues/'+code).set({name:name,created:Date.now(),createdBy:currentUser?currentUser.uid:'',members:{[S.playerId]:{name:S.playerName,totalScore:0,gamesPlayed:0,joinedAt:Date.now()}}});
+  setMyLeague(code);renderLeagueCard();
+}
+function promptJoinLeague(){
+  const code=(prompt('Enter league code:')||'').trim().toUpperCase();if(code.length!==4)return;
+  db.ref('leagues/'+code).once('value',snap=>{
+    if(!snap.exists()){alert('League not found');return}
+    db.ref('leagues/'+code+'/members/'+S.playerId).set({name:S.playerName,totalScore:0,gamesPlayed:0,joinedAt:Date.now()});
+    setMyLeague(code);renderLeagueCard();
+  });
+}
+function uploadLeagueScore(score,gameId){
+  if(!myLeagueCode||!currentUser)return;
+  const ref=db.ref('leagues/'+myLeagueCode);
+  ref.child('history').push({uid:currentUser.uid,name:S.playerName,score:score,gameId:gameId||'',date:todayStr()});
+  ref.child('members/'+S.playerId+'/totalScore').transaction(v=>(v||0)+score);
+  ref.child('members/'+S.playerId+'/gamesPlayed').transaction(v=>(v||0)+1);
+}
+function renderLeagueCard(){
+  myLeagueCode=getMyLeague();
+  const el=$('leagueContent');if(!el)return;
+  if(!myLeagueCode){
+    el.innerHTML='<div style="text-align:center;font-size:11px;color:var(--muted);padding:6px 0">Join or create a league</div><div class="lg-actions"><button class="lg-create" onclick="promptCreateLeague()">Create League</button><button class="lg-join" onclick="promptJoinLeague()">Join League</button></div>';
+    return;
+  }
+  db.ref('leagues/'+myLeagueCode).once('value',snap=>{
+    const d=snap.val();if(!d){el.innerHTML='<div style="color:var(--muted);font-size:10px">League not found</div>';return}
+    const members=d.members?Object.entries(d.members).map(([id,m])=>({...m,id})).sort((a,b)=>(b.totalScore||0)-(a.totalScore||0)):[];
+    const medals=['\uD83E\uDD47','\uD83E\uDD48','\uD83E\uDD49'];
+    el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:12px;font-weight:700">'+d.name+'</span><span class="lg-code">'+myLeagueCode+'</span></div>'+
+      members.slice(0,5).map((m,i)=>'<div class="lg-row'+(m.id===S.playerId?' lg-me':'')+'"><span class="lg-rank">'+(medals[i]||(i+1)+'.')+'</span><span class="lg-name">'+m.name+(m.id===S.playerId?' (You)':'')+'</span><span class="lg-pts">'+(m.totalScore||0)+'</span></div>').join('')+
+      '<div class="lg-actions" style="margin-top:6px"><button class="lg-join" onclick="navigator.clipboard.writeText(\''+myLeagueCode+'\');this.textContent=\'Copied!\';setTimeout(()=>this.textContent=\'Share Code\',1500)">Share Code</button><button style="background:var(--card2);color:var(--red);border:none;border-radius:8px;padding:8px;font-size:9px;font-weight:700;cursor:pointer" onclick="setMyLeague(null);renderLeagueCard()">Leave</button></div>';
+  });
+}
+
+/* ══════════════════════════════════════
+   PREGAME BETS
+   ══════════════════════════════════════ */
+let activeBets={};
+function loadBets(){
+  if(!currentUser)return;
+  db.ref('bets/'+currentUser.uid).once('value',snap=>{activeBets=snap.val()||{};renderBets()});
+}
+function placeBet(gameId,team,amount,awayName,homeName){
+  if(!currentUser||userBalance<amount){alert('Not enough points!');return}
+  userBalance-=amount;
+  db.ref('users/'+currentUser.uid).update({balance:userBalance});
+  $('balVal').textContent=userBalance.toLocaleString();
+  activeBets[gameId]={team,amount,awayName,homeName,placed:Date.now()};
+  db.ref('bets/'+currentUser.uid+'/'+gameId).set(activeBets[gameId]);
+  renderBets();
+  addSocialPulse('\uD83C\uDFB0','<span class="ds-pulse-user">'+S.playerName+'</span> bet '+amount+' pts on '+team,'ds-pulse-hot');
+}
+function checkBetResults(){
+  if(!currentUser||!cachedGames)return;
+  Object.entries(activeBets).forEach(([gId,bet])=>{
+    const game=cachedGames.find(g=>String(g.gamePk)===String(gId));
+    if(!game||game.status.abstractGameState!=='Final')return;
+    const awayWon=(game.teams.away.score||0)>(game.teams.home.score||0);
+    const winner=awayWon?game.teams.away.team.name:game.teams.home.team.name;
+    if(bet.team===winner){
+      const payout=bet.amount*2;userBalance+=payout;
+      db.ref('users/'+currentUser.uid).update({balance:userBalance});
+      $('balVal').textContent=userBalance.toLocaleString();
+      addSocialPulse('\uD83C\uDFC6','<span class="ds-pulse-user">'+S.playerName+'</span> won '+payout+' pts on '+bet.team+'!','ds-pulse-score');
+    }
+    delete activeBets[gId];db.ref('bets/'+currentUser.uid+'/'+gId).remove();
+  });
+  renderBets();
+}
+function renderBets(){
+  const el=$('betsContent');if(!el||!cachedGames)return;
+  const upcoming=cachedGames.filter(g=>g.status.abstractGameState!=='Final');
+  if(!upcoming.length){el.innerHTML='<div style="font-size:10px;color:var(--muted);text-align:center">No upcoming games</div>';return}
+  el.innerHTML=upcoming.slice(0,4).map(g=>{
+    const gId=g.gamePk;const aw=g.teams.away.team.name;const hm=g.teams.home.team.name;
+    const bet=activeBets[gId];
+    if(bet)return'<div class="bet-row"><span class="bet-active">\u2705 '+bet.team+' \u2014 '+bet.amount+' pts</span></div>';
+    const awA=aw.split(' ').pop();const hmA=hm.split(' ').pop();
+    return'<div class="bet-row"><button class="bet-team" onclick="placeBet('+gId+',\''+aw.replace(/'/g,'')+'\',50)">'+awA+' (50)</button><span class="bet-vs">vs</span><button class="bet-team" onclick="placeBet('+gId+',\''+hm.replace(/'/g,'')+'\',50)">'+hmA+' (50)</button></div>';
+  }).join('');
+}
+
+/* ══════════════════════════════════════
+   SCOUTING REPORTS
+   ══════════════════════════════════════ */
+let scoutCache={};
+async function loadScoutReport(pitcherId,batterId){
+  const el=$('scoutContent');if(!el)return;
+  if(!pitcherId&&!batterId){el.innerHTML='<span style="color:var(--muted)">Waiting for matchup...</span>';return}
+  const key=pitcherId+'_'+batterId;
+  if(scoutCache[key]){el.innerHTML=scoutCache[key];return}
+  el.innerHTML='<span style="color:var(--muted)">Loading...</span>';
+  let html='';
+  try{
+    if(pitcherId){
+      const r=await fetch('https://statsapi.mlb.com/api/v1/people/'+pitcherId+'/stats?stats=season&season=2025&group=pitching');
+      const d=await r.json();const st=d.stats&&d.stats[0]&&d.stats[0].splits&&d.stats[0].splits[0]&&d.stats[0].splits[0].stat;
+      if(st){
+        html+='<div class="scout-section">Pitcher</div>';
+        html+='<div class="scout-row"><span class="sr-label">ERA</span><span class="sr-val">'+(st.era||'--')+'</span></div>';
+        html+='<div class="scout-row"><span class="sr-label">K/9</span><span class="sr-val">'+(st.strikeoutsPer9Inn||'--')+'</span></div>';
+        html+='<div class="scout-row"><span class="sr-label">WHIP</span><span class="sr-val">'+(st.whip||'--')+'</span></div>';
+        const strikes=parseInt(st.strikes||0);const pitches=parseInt(st.numberOfPitches||1);
+        html+='<div class="scout-row"><span class="sr-label">Strike%</span><span class="sr-val" style="color:var(--accent)">'+Math.round(strikes/pitches*100)+'%</span></div>';
+      }
+    }
+    if(batterId){
+      const r=await fetch('https://statsapi.mlb.com/api/v1/people/'+batterId+'/stats?stats=season&season=2025&group=hitting');
+      const d=await r.json();const st=d.stats&&d.stats[0]&&d.stats[0].splits&&d.stats[0].splits[0]&&d.stats[0].splits[0].stat;
+      if(st){
+        html+='<div class="scout-section">Batter</div>';
+        html+='<div class="scout-row"><span class="sr-label">AVG</span><span class="sr-val">'+(st.avg||'--')+'</span></div>';
+        html+='<div class="scout-row"><span class="sr-label">OBP</span><span class="sr-val">'+(st.obp||'--')+'</span></div>';
+        html+='<div class="scout-row"><span class="sr-label">SLG</span><span class="sr-val">'+(st.slg||'--')+'</span></div>';
+        html+='<div class="scout-row"><span class="sr-label">HR</span><span class="sr-val">'+(st.homeRuns||0)+'</span></div>';
+        const ab=parseInt(st.atBats||1);const k=parseInt(st.strikeOuts||0);
+        html+='<div class="scout-row"><span class="sr-label">K%</span><span class="sr-val" style="color:var(--red)">'+Math.round(k/ab*100)+'%</span></div>';
+      }
+    }
+  }catch(e){html='<span style="color:var(--muted)">Stats unavailable</span>'}
+  if(!html)html='<span style="color:var(--muted)">No stats found</span>';
+  scoutCache[key]=html;el.innerHTML=html;
+}
+
+/* ══════════════════════════════════════
    DYNAMIC BACKGROUND
    ══════════════════════════════════════ */
 function updateDynamicBg(dt){
