@@ -733,6 +733,28 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
     <button class="btn-solo" id="btnSoloMode">Solo vs CPU</button>
     <button class="btn-friends" id="btnFriendsMode">Play with Friends</button>
   </div>
+  <!-- Home Cards: AI Tip, Live Stats, Trends -->
+  <div style="display:flex;gap:6px;margin:2px 0">
+    <div style="flex:1;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:var(--radius);padding:10px;border:1px solid var(--glass-border);min-width:0">
+      <div style="font-size:8px;color:var(--accent);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:4px">&#129504; AI Tip</div>
+      <div id="homeTip" style="font-size:10px;line-height:1.4;color:var(--text)">Loading...</div>
+    </div>
+    <div style="flex:1;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:var(--radius);padding:10px;border:1px solid var(--glass-border);min-width:0">
+      <div style="font-size:8px;color:var(--red);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:4px"><span style="width:5px;height:5px;border-radius:50%;background:var(--red);animation:livePulse 1.5s ease-in-out infinite"></span> Live</div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:var(--muted)">Today</span><span id="homeGames" style="font-weight:800">--</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:var(--muted)">Live</span><span id="homeLive" style="font-weight:800;color:var(--red)">--</span></div>
+      </div>
+    </div>
+    <div style="flex:1;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:var(--radius);padding:10px;border:1px solid var(--glass-border);min-width:0">
+      <div style="font-size:8px;color:var(--accent2);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:4px">&#128200; Trends</div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:var(--muted)">Accuracy</span><span id="homeAcc" style="font-weight:800">0%</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:var(--muted)">Best</span><span id="homeStreak" style="font-weight:800;color:var(--accent)">0</span></div>
+      </div>
+    </div>
+  </div>
+
   <div class="notif-banner" id="notifBanner">
     <p>&#128276; Get notified when friends join or it's your turn?</p>
     <div class="notif-btns">
@@ -1249,6 +1271,9 @@ auth.onAuthStateChanged(async(user)=>{
       '<div style="'+statStyle+'"><div style="'+valStyle+'">'+lvl+'</div><div style="'+lblStyle+'">Level</div></div>';
     $('logoutBtn').style.display=isGuest?'none':'';
     $('homeBalance').style.display='';
+    // Home card trends
+    const ha2=$('homeAcc');if(ha2)ha2.textContent=acc+'%';
+    const hs2=$('homeStreak');if(hs2)hs2.textContent=S.bestStreak||0;
     // Mini auth bar
     $('miniAuthText').textContent=S.playerName;
     if(isGuest){
@@ -5006,6 +5031,15 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('beforeunload',()=>{if(S.userScore>0){saveLB();saveUserStats()}});
 // ── Desktop sidebar data population ──
 function updateDesktopSidebars(){
+  // Home screen cards (always update, any screen size)
+  if(cachedGames&&cachedGames.length){
+    const live=cachedGames.filter(g=>g.status.abstractGameState==='Live');
+    const hg=$('homeGames');if(hg)hg.textContent=cachedGames.length;
+    const hl=$('homeLive');if(hl)hl.textContent=live.length||'0';
+  }
+  const ha=$('homeAcc');if(ha)ha.textContent=S.totalPredictions>0?Math.round(S.correctCount/S.totalPredictions*100)+'%':'0%';
+  const hs=$('homeStreak');if(hs)hs.textContent=S.bestStreak||0;
+
   if(window.innerWidth<1024)return;
   // Left: Live stats
   if(cachedGames&&cachedGames.length){
@@ -5046,8 +5080,10 @@ const aiTips=[
 ];
 let aiTipIdx=0;
 function rotateAiTips(){
-  const el=$('dsAiTips');if(!el)return;
-  el.innerHTML='<div style="margin-bottom:4px;font-size:9px;color:var(--accent);font-weight:700">TIP #'+(aiTipIdx+1)+'</div>'+aiTips[aiTipIdx];
+  const el=$('dsAiTips');
+  if(el)el.innerHTML='<div style="margin-bottom:4px;font-size:9px;color:var(--accent);font-weight:700">TIP #'+(aiTipIdx+1)+'</div>'+aiTips[aiTipIdx];
+  // Also update home screen tip
+  const ht=$('homeTip');if(ht)ht.textContent=aiTips[aiTipIdx];
   aiTipIdx=(aiTipIdx+1)%aiTips.length;
 }
 rotateAiTips();setInterval(rotateAiTips,12000);
