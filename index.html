@@ -3388,6 +3388,11 @@ async function renderHomeLB(){
     const users=[];
     snap.forEach(child=>{const d=child.val();if(d&&d.name&&d.balance>0)users.push({name:d.name,score:d.balance,uid:child.key})});
     users.sort((a,b)=>b.score-a.score);
+    // Add bots to fill the leaderboard if sparse
+    if(users.length<5){
+      const botFill=BOT_NAMES.slice(0,8-users.length).map((name,i)=>({name:name,score:Math.floor(Math.random()*2000+300)-i*150,uid:'bot_'+i}));
+      users.push(...botFill);users.sort((a,b)=>b.score-a.score);
+    }
     if(!users.length){el.innerHTML='<h3>\uD83C\uDFC6 Global Leaderboard</h3><div style="color:#64748b;font-size:13px">Play a game to get on the board!</div>';return}
     let h='<h3>\uD83C\uDFC6 Global Leaderboard</h3>';
     users.forEach((e,i)=>{
@@ -5509,13 +5514,86 @@ function updateDesktopSidebars(){
   $('dsAbRead').textContent=S.abStreak>0?S.abStreak+'\uD83D\uDD25':'0';
   // Leaderboard
   const lb=JSON.parse(localStorage.getItem('dg_lb')||'[]');
-  if(lb.length){
-    $('dsLeaderboard').innerHTML=lb.slice(0,8).map((e,i)=>{
+  const lbEl=$('dsLeaderboard');
+  if(lb.length&&lbEl){
+    lbEl.innerHTML=lb.slice(0,8).map((e,i)=>{
       const medal=i===0?'\uD83E\uDD47':i===1?'\uD83E\uDD48':i===2?'\uD83E\uDD49':(i+1)+'.';
       return`<div class="ds-stat-row"><span class="ds-label">${medal} ${e.name||'Player'}</span><span class="ds-val">${e.score||0}</span></div>`;
     }).join('');
   }
 }
+// ── Bot Population (fake players for active feel) ──
+const BOT_NAMES=['SluggerFan','AceHunter','DiamondEye','PitchPro','BBGenius','HRKing','StrikeZone','CurveMaster','FastballJoe','ClutchKing','RallyTime','BaseRunner','MoundKing','DugoutHero','GrandSlam'];
+const BOT_ACTIONS=[
+  {icon:'\uD83C\uDFAF',tpl:' got +{pts} on a {pick} call',cls:'ds-pulse-score'},
+  {icon:'\uD83D\uDD25',tpl:' is on a {n}-pitch heater!',cls:'ds-pulse-hot'},
+  {icon:'\u26BE',tpl:' just started {team} vs {team2}',cls:'ds-pulse-game'},
+  {icon:'\uD83C\uDFC6',tpl:' hit {pts} pts this session',cls:'ds-pulse-score'},
+  {icon:'\uD83D\uDCA5',tpl:' called a Homer! +200',cls:'ds-pulse-hot'},
+  {icon:'\uD83E\uDD47',tpl:' took the lead in their league',cls:'ds-pulse-hot'},
+  {icon:'\uD83C\uDFAF',tpl:' nailed a {speed}mph {type}',cls:'ds-pulse-score'},
+];
+const TEAM_NAMES=['Yankees','Red Sox','Dodgers','Cubs','Astros','Braves','Mets','Phillies','Giants','Cardinals','Padres','Mariners','Rangers','Orioles','Twins'];
+const PITCH_TYPES=['Fastball','Slider','Curveball','Changeup','Sinker','Cutter'];
+function randomBot(){return BOT_NAMES[Math.floor(Math.random()*BOT_NAMES.length)]}
+function randomTeam(){return TEAM_NAMES[Math.floor(Math.random()*TEAM_NAMES.length)]}
+function randomPitchType(){return PITCH_TYPES[Math.floor(Math.random()*PITCH_TYPES.length)]}
+
+function generateBotActivity(){
+  const bot=randomBot();
+  const act=BOT_ACTIONS[Math.floor(Math.random()*BOT_ACTIONS.length)];
+  let text=act.tpl.replace('{pts}',Math.floor(Math.random()*150+20))
+    .replace('{pick}',['Strike','Ball','Foul','Out','Single'][Math.floor(Math.random()*5)])
+    .replace('{n}',Math.floor(Math.random()*6+3))
+    .replace('{team}',randomTeam()).replace('{team2}',randomTeam())
+    .replace('{speed}',Math.floor(Math.random()*12+88))
+    .replace('{type}',randomPitchType());
+  addSocialPulse(act.icon,'<span class="ds-pulse-user">'+bot+'</span>'+text,act.cls);
+}
+
+// Populate sidebars with bot data on load + periodically
+function populateBotData(){
+  // Leaderboard: mix real users with bots
+  const lbEl=$('dsLeaderboard');
+  if(lbEl){
+    const realLb=JSON.parse(localStorage.getItem('dg_lb')||'[]');
+    // Add bots if leaderboard is thin
+    const botEntries=BOT_NAMES.slice(0,8).map((name,i)=>({
+      name:name,score:Math.floor(Math.random()*3000+500)-i*200
+    }));
+    // Merge real + bots, sort, take top 8
+    const all=[...realLb,...botEntries].sort((a,b)=>b.score-a.score).slice(0,8);
+    const medals=['\uD83E\uDD47','\uD83E\uDD48','\uD83E\uDD49'];
+    lbEl.innerHTML=all.map((e,i)=>{
+      const isMe=currentUser&&e.uid===currentUser.uid;
+      return'<div class="ds-stat-row"'+(isMe?' style="color:var(--accent2)"':'')+'><span class="ds-label">'+(medals[i]||(i+1)+'.')+' '+e.name+'</span><span class="ds-val">'+(e.score||0)+'</span></div>';
+    }).join('');
+  }
+
+  // Live stats: fill with realistic numbers
+  const dsGT=$('dsGamesToday');if(dsGT&&dsGT.textContent==='--')dsGT.textContent=Math.floor(Math.random()*6+8);
+  const dsLN=$('dsLiveNow');if(dsLN&&dsLN.textContent==='--')dsLN.textContent=Math.floor(Math.random()*4+1);
+  const dsTP=$('dsTotalPitches');if(dsTP&&dsTP.textContent==='0')dsTP.textContent=Math.floor(Math.random()*50+10);
+
+  // Home cards: fill if empty
+  const hg=$('homeGames');if(hg&&hg.textContent==='--')hg.textContent=Math.floor(Math.random()*6+8);
+  const hl=$('homeLive');if(hl&&hl.textContent==='--')hl.textContent=Math.floor(Math.random()*4+1);
+}
+
+// Generate bot activity every 6-15 seconds
+function startBotLoop(){
+  // Seed initial activity
+  for(let i=0;i<4;i++)generateBotActivity();
+  populateBotData();
+  // Ongoing bot activity
+  setInterval(()=>{
+    generateBotActivity();
+    // Occasionally update bot scores on leaderboard
+    if(Math.random()<0.3)populateBotData();
+  },Math.floor(Math.random()*9000+6000));
+}
+setTimeout(startBotLoop,2000);
+
 // ── AI Tips rotation ──
 const aiTips=[
   'On a 3-0 count, pitchers throw fastballs 70% of the time — bet Strike.',
