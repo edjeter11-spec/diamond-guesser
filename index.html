@@ -5528,7 +5528,7 @@ function updateDesktopSidebars(){
   }
 }
 // ── Social Pulse (activity feed) ──
-let socialPulseItems=[];
+socialPulseItems=[];
 function addSocialPulse(icon,text,cls){
   const time=new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
   socialPulseItems.unshift({icon,text,time,cls:cls||''});
