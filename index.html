@@ -1290,7 +1290,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
 </div>
 
 <script>
-var activeBets={},socialPulseItems=[];
+var activeBets={},socialPulseItems=[],scoutCache={},feedBuffer=[],firstFeedApplied=false,practiceMode=false,practicePitches=[],practiceIdx=0,practiceTimer=null,practiceWaiting=false,practiceGameData=null;
 /* ══════════════════════════════════════
    FIREBASE CONFIG
    ══════════════════════════════════════ */
@@ -2547,7 +2547,7 @@ function mpRunCountdown(pitch){triggerPitchSequence(pitch)}
    FETCH + DELAYED FEED
    ══════════════════════════════════════ */
 // Buffer entire API responses — only apply after TV delay
-let feedBuffer=[];let firstFeedApplied=false;
+feedBuffer=[];firstFeedApplied=false;
 async function fetchLoop(){
   if(!S.gameActive)return;
   await fetchGame();
@@ -3571,9 +3571,9 @@ function showEndGame(){
 /* ══════════════════════════════════════
    PRACTICE MODE — Simulated replay
    ══════════════════════════════════════ */
-let practiceMode=false,practicePitches=[],practiceIdx=0,practiceTimer=null,practiceSpeed=0;// 0 = manual
-let practiceWaiting=false;// true when waiting for user to click Next
-let practiceGameData=null;
+practiceMode=false,practicePitches=[],practiceIdx=0,practiceTimer=null,practiceSpeed=0;// 0 = manual
+practiceWaiting=false;// true when waiting for user to click Next
+practiceGameData=null;
 
 // btnPractice removed — solo sim triggered from soloSim button
 $('btnMPPractice').addEventListener('click',()=>startPractice(true));
@@ -5425,7 +5425,7 @@ function renderBets(){
 /* ══════════════════════════════════════
    SCOUTING REPORTS
    ══════════════════════════════════════ */
-let scoutCache={};
+scoutCache={};
 async function loadScoutReport(pitcherId,batterId){
   const el=$('scoutContent');if(!el)return;
   if(!pitcherId&&!batterId){el.innerHTML='<span style="color:var(--muted)">Waiting for matchup...</span>';return}
