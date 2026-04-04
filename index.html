@@ -5378,7 +5378,8 @@ function renderLeagueCard(){
    PREGAME BETS
    ══════════════════════════════════════ */
 activeBets={};
-function loadBets(){activeBets={};)return;
+function loadBets(){
+  if(!currentUser)return;
   db.ref('bets/'+currentUser.uid).once('value',snap=>{activeBets=snap.val()||{};renderBets()});
 }
 function placeBet(gameId,team,amount,awayName,homeName){
