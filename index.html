@@ -1290,6 +1290,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
 </div>
 
 <script>
+var activeBets={},socialPulseItems=[];
 /* ══════════════════════════════════════
    FIREBASE CONFIG
    ══════════════════════════════════════ */
@@ -5376,9 +5377,8 @@ function renderLeagueCard(){
 /* ══════════════════════════════════════
    PREGAME BETS
    ══════════════════════════════════════ */
-let activeBets={};
-function loadBets(){
-  if(!currentUser)return;
+activeBets={};
+function loadBets(){activeBets={};)return;
   db.ref('bets/'+currentUser.uid).once('value',snap=>{activeBets=snap.val()||{};renderBets()});
 }
 function placeBet(gameId,team,amount,awayName,homeName){
