@@ -1,4 +1,4 @@
-const CACHE='dg-v3';
+const CACHE='dg-v6-direct-fetch';
 
 self.addEventListener('install',e=>{
   self.skipWaiting();

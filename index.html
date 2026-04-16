@@ -1495,6 +1495,7 @@ function makeGameCard(g,cls,pickMode){
   card.innerHTML=`<div class="gc-teams"><div class="gc-team"><img class="gc-logo" src="${teamLogo(awId)}" onerror="this.style.display='none'" alt=""><span class="gc-team-name">${aw.team.name}</span><span class="gc-score">${aw.score!=null?aw.score:''}</span></div><div class="gc-team"><img class="gc-logo" src="${teamLogo(hmId)}" onerror="this.style.display='none'" alt=""><span class="gc-team-name">${hm.team.name}</span><span class="gc-score">${hm.score!=null?hm.score:''}</span></div></div><div class="gc-meta"><div class="gc-status">${txt}</div></div><div class="gc-arrow">\u203A</div>`;
   card.addEventListener('click',()=>{
     if(pickMode){
+      practiceMode=false;
       if(S.isHost&&roomRef)roomRef.child('game').set({gameId:g.gamePk,away:aw.team.name,home:hm.team.name,awayId:awId,homeId:hmId});
       startGame(g.gamePk,aw.team.name,hm.team.name,awId,hmId);
     }else{showModeModal(g.gamePk,aw.team.name,hm.team.name,awId,hmId)}
@@ -1502,7 +1503,7 @@ function makeGameCard(g,cls,pickMode){
   return card;
 }
 $('refreshGames').addEventListener('click',()=>loadGames());
-$('backBtn').addEventListener('click',()=>{stopGame();showScreen(S.isMultiplayer?'screenLobby':'screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString();refreshHomeStats()});
+$('backBtn').addEventListener('click',()=>{stopGame();practiceMode=false;showScreen(S.isMultiplayer?'screenLobby':'screenHome');renderHomeLB();$('balVal').textContent=userBalance.toLocaleString();refreshHomeStats()});
 
 /* ══════ GAME MODE MODAL ══════ */
 let pendingGame=null;
@@ -1512,11 +1513,11 @@ function showModeModal(gameId,away,home,awayId,homeId){
   $('modeModal').classList.add('show');
 }
 $('modalSolo').addEventListener('click',()=>{
-  $('modeModal').classList.remove('show');if(!pendingGame)return;S.isMultiplayer=false;S.isHost=false;
+  $('modeModal').classList.remove('show');if(!pendingGame)return;S.isMultiplayer=false;S.isHost=false;practiceMode=false;
   startGame(pendingGame.gameId,pendingGame.away,pendingGame.home,pendingGame.awayId,pendingGame.homeId);
 });
 $('modalFriends').addEventListener('click',()=>{
-  $('modeModal').classList.remove('show');ensureName();showScreen('screenLobby');
+  $('modeModal').classList.remove('show');practiceMode=false;ensureName();showScreen('screenLobby');
   $('lobbyOptions').style.display='';$('roomDisplay').classList.remove('show');
 });
 $('modalCancel').addEventListener('click',()=>{$('modeModal').classList.remove('show')});
@@ -1524,7 +1525,7 @@ $('modalCancel').addEventListener('click',()=>{$('modeModal').classList.remove('
 /* HOME MODE */
 $('btnSoloMode').addEventListener('click',()=>{$('soloModal').classList.add('show')});
 $('soloLive').addEventListener('click',()=>{
-  $('soloModal').classList.remove('show');S.isMultiplayer=false;S.isHost=false;
+  $('soloModal').classList.remove('show');S.isMultiplayer=false;S.isHost=false;practiceMode=false;
   // Scroll to game list
   document.querySelector('.game-list').scrollIntoView({behavior:'smooth'});
 });
@@ -1533,7 +1534,7 @@ $('soloSim').addEventListener('click',()=>{
   startPractice(false);
 });
 $('soloCancel').addEventListener('click',()=>{$('soloModal').classList.remove('show')});
-$('btnFriendsMode').addEventListener('click',()=>{ensureName();showScreen('screenLobby');$('lobbyOptions').style.display='';$('roomDisplay').classList.remove('show')});
+$('btnFriendsMode').addEventListener('click',()=>{practiceMode=false;ensureName();showScreen('screenLobby');$('lobbyOptions').style.display='';$('roomDisplay').classList.remove('show')});
 $('lobbyBackBtn').addEventListener('click',()=>{mpDisconnect(true);showScreen('screenHome')});
 
 function ensureName(){
@@ -2033,19 +2034,39 @@ function startGame(gameId,away,home,awayId,homeId){
 
   clearZone();renderCountDots(0,0,0);renderBases(false,false,false,{});setPred(true);showScreen('screenGame');startTicker();renderGameLB();
   // Auto-show scout report
-  $('scoutBody').classList.add('show');scoutCache={};
+  try{$('scoutBody').classList.add('show')}catch(e){}
+  scoutCache={};
   feedBuffer=[];firstFeedApplied=false;mpLastPitchNum=0;mpPendingPitch=null;mpCountdownActive=false;mpResultShowing=false;mpFirstFetch=true;midAtBatLocked=false;soloFirstExtract=true;
   clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
 
+
   if(practiceMode){
-    // Practice mode handles its own pitch flow — don't start fetch loops
-  }else if(S.isMultiplayer){
-    // MP live: only host fetches API, clients listen to Firebase
-    if(S.isHost){mpHostStart()}
+    }else if(S.isMultiplayer){
+      if(S.isHost){mpHostStart()}
     else{mpClientStart()}
   }else{
-    // Solo live: fetch directly
-    fetchLoop();S.queueInterval=setInterval(processQueue,300);
+    // Solo live: fetch directly + apply to UI immediately
+      $('statusBar').textContent='\uD83D\uDCE1 Connecting to live feed...';
+    S.queueInterval=setInterval(processQueue,300);
+    // Fetch immediately and apply first data directly (bypass queue delay)
+    (async function(){
+      try{
+              const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+S.gameId+'/feed/live?fields=gameData,datetime,firstPitch,dateTime,status,detailedState,teams,away,home,name,abbreviation,id,liveData,linescore,currentInning,inningHalf,inningState,teams,away,home,runs,offense,first,second,third,fullName,batter,onDeck,inHole,defense,pitcher,plays,currentPlay,matchup,pitcher,batter,fullName,id,count,balls,strikes,outs,about,isComplete,inning,halfInning,result,event,eventType,description,rbi,awayScore,homeScore,isScoringPlay,playEvents,isPitch,pitchNumber,details,description,call,code,type,code,description,pitchData,coordinates,pX,pZ,strikeZoneTop,strikeZoneBottom,startSpeed,allPlays,scoringPlays');
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        const d=await r.json();
+              // Apply feed to UI immediately — no waiting for processQueue
+        if(!firstFeedApplied){firstFeedApplied=true;applyDelayedFeed(d)}
+        feedBuffer.push({data:d,time:Date.now()/1000});
+        extractPitches(d);
+        try{updateDynamicBg(d.gameData.datetime)}catch(e){}
+        $('statusBar').textContent='\uD83C\uDFAF Make your call!';
+      }catch(e){
+        console.error('[startGame] Direct fetch failed:',e);
+        $('statusBar').textContent='\u26A0 '+e.message+' — retrying...';
+      }
+      // Continue with normal fetch loop
+      if(S.gameActive)S.fetchInterval=setTimeout(fetchLoop,getFetchInterval());
+    })();
   }
 }
 function stopGame(){S.gameActive=false;clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);clearTimeout(mpCountdownTimer);if(attemptRevealTimer){clearInterval(attemptRevealTimer);attemptRevealTimer=null}stopTicker();stopSpotRotation();hideWager();$('mpSpotlight').classList.remove('show');$('mpDugout').classList.remove('show');$('mpSyncBar').classList.remove('show');$('pitchOverlay').classList.remove('show');$('mpWaitingOverlay').classList.remove('show');$('mpDelayBar').classList.remove('show');collapseLeagueInMP();if(S.userScore>0){saveLB();saveUserStats()}}
@@ -2168,7 +2189,9 @@ async function mpHostFetch(){
   // Don't fetch while a pitch is pending, countdown is active, or result is showing
   if(mpPendingPitch||mpCountdownActive||mpResultShowing){S.fetchInterval=setTimeout(mpHostFetch,2000);return}
   try{
-    const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+S.gameId+'/feed/live?fields=gameData,datetime,firstPitch,dateTime,status,detailedState,teams,away,home,name,abbreviation,id,liveData,linescore,currentInning,inningHalf,inningState,teams,away,home,runs,offense,first,second,third,fullName,batter,onDeck,inHole,defense,pitcher,plays,currentPlay,matchup,pitcher,batter,fullName,id,count,balls,strikes,outs,about,isComplete,inning,halfInning,result,event,eventType,description,rbi,awayScore,homeScore,isScoringPlay,playEvents,isPitch,pitchNumber,details,description,call,code,type,code,description,pitchData,coordinates,pX,pZ,strikeZoneTop,strikeZoneBottom,startSpeed,allPlays,scoringPlays');
+    const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),10000);
+    const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+S.gameId+'/feed/live?fields=gameData,datetime,firstPitch,dateTime,status,detailedState,teams,away,home,name,abbreviation,id,liveData,linescore,currentInning,inningHalf,inningState,teams,away,home,runs,offense,first,second,third,fullName,batter,onDeck,inHole,defense,pitcher,plays,currentPlay,matchup,pitcher,batter,fullName,id,count,balls,strikes,outs,about,isComplete,inning,halfInning,result,event,eventType,description,rbi,awayScore,homeScore,isScoringPlay,playEvents,isPitch,pitchNumber,details,description,call,code,type,code,description,pitchData,coordinates,pX,pZ,strikeZoneTop,strikeZoneBottom,startSpeed,allPlays,scoringPlays',{signal:ctrl.signal});
+    clearTimeout(to);
     if(!r.ok)throw new Error(r.status);
     const d=await r.json();
     const ls=d.liveData.linescore||{};const cp=d.liveData.plays&&d.liveData.plays.currentPlay;
@@ -2554,17 +2577,22 @@ async function fetchLoop(){
   S.fetchInterval=setTimeout(fetchLoop,getFetchInterval());
 }
 async function fetchGame(){
-  if(!S.gameActive)return;
+  if(!S.gameActive){console.warn('[fetchGame] gameActive=false, skipping');return}
   setScoreLoading(true);
   try{
-    const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+S.gameId+'/feed/live?fields=gameData,datetime,firstPitch,dateTime,status,detailedState,teams,away,home,name,abbreviation,id,liveData,linescore,currentInning,inningHalf,inningState,teams,away,home,runs,offense,first,second,third,fullName,batter,onDeck,inHole,defense,pitcher,plays,currentPlay,matchup,pitcher,batter,fullName,id,count,balls,strikes,outs,about,isComplete,inning,halfInning,result,event,eventType,description,rbi,awayScore,homeScore,isScoringPlay,playEvents,isPitch,pitchNumber,details,description,call,code,type,code,description,pitchData,coordinates,pX,pZ,strikeZoneTop,strikeZoneBottom,startSpeed,allPlays,scoringPlays');
-    if(!r.ok)throw new Error(r.status);
+    const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),10000);
+    const r=await fetch('https://statsapi.mlb.com/api/v1.1/game/'+S.gameId+'/feed/live?fields=gameData,datetime,firstPitch,dateTime,status,detailedState,teams,away,home,name,abbreviation,id,liveData,linescore,currentInning,inningHalf,inningState,teams,away,home,runs,offense,first,second,third,fullName,batter,onDeck,inHole,defense,pitcher,plays,currentPlay,matchup,pitcher,batter,fullName,id,count,balls,strikes,outs,about,isComplete,inning,halfInning,result,event,eventType,description,rbi,awayScore,homeScore,isScoringPlay,playEvents,isPitch,pitchNumber,details,description,call,code,type,code,description,pitchData,coordinates,pX,pZ,strikeZoneTop,strikeZoneBottom,startSpeed,allPlays,scoringPlays',{signal:ctrl.signal});
+    clearTimeout(to);
+    if(!r.ok)throw new Error('HTTP '+r.status);
     const d=await r.json();
-    feedBuffer.push({data:d,time:Date.now()/1000});
+      feedBuffer.push({data:d,time:Date.now()/1000});
     extractPitches(d);
-    // Dynamic background based on game time
     try{updateDynamicBg(d.gameData.datetime)}catch(e){}
-  }catch(e){$('statusBar').textContent='\u26A0 API error \u2014 retrying...'}
+  }catch(e){
+    console.error('[fetchGame] Error:',e);
+    if(e.name==='AbortError')$('statusBar').textContent='\u26A0 Slow connection \u2014 retrying...';
+    else $('statusBar').textContent='\u26A0 API error: '+(e.message||e)+' \u2014 retrying...';
+  }
   setScoreLoading(false);
 }
 // Pull pitch events from feed without updating UI
@@ -2612,7 +2640,7 @@ function extractPitches(d){
 
 // Apply a delayed game feed snapshot to the UI (everything EXCEPT pitches)
 function applyDelayedFeed(d){
-  if(!d||!d.liveData)return;
+  if(!d||!d.liveData){console.warn('[applyDelayedFeed] No liveData');return}
   const ls=d.liveData.linescore||{},inning=ls.currentInning||0,half=ls.inningHalf||'';
   S.currentInning=inning;
 
@@ -3852,7 +3880,6 @@ async function startPractice(isMP){
     const allPlays=gd.liveData.plays.allPlays||[];
     practicePitches=extractPracticeData(allPlays);
 
-    console.log('Practice: loaded '+practicePitches.length+' pitches from '+allPlays.length+' at-bats for game '+gamePk);
     if(practicePitches.length<50){
       // Too few pitches for a full game experience — try another game
       console.warn('Only '+practicePitches.length+' pitches found, trying another game...');
@@ -3864,7 +3891,6 @@ async function startPractice(isMP){
         practiceGameData=gd2;
         const ap2=gd2.liveData.plays.allPlays||[];
         practicePitches=extractPracticeData(ap2);
-        console.log('Retry: loaded '+practicePitches.length+' pitches from game '+g2.gamePk);
       }
     }
     if(!practicePitches.length){btn.textContent='No pitch data found';return}
