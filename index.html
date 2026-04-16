@@ -517,8 +517,10 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
 
 /* Pitch type */
 .ptype-row{display:none;gap:4px}.ptype-row.open{display:flex}
-.ptype-btn{flex:1;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;padding:6px 2px;text-align:center;background:var(--card2);color:var(--muted);transition:transform .1s}
+.ptype-btn{flex:1;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;padding:6px 2px;text-align:center;background:var(--card2);color:var(--muted);transition:transform .1s;display:flex;flex-direction:column;align-items:center;gap:1px}
 .ptype-btn:active{transform:scale(0.95)}.ptype-btn.sel{outline:2px solid var(--accent);color:var(--text)}
+.ptype-pct{font-size:8px;font-weight:600;color:var(--accent);opacity:0;transition:opacity .3s;min-height:10px}
+.ptype-pct.visible{opacity:1}
 
 /* Status */
 /* ── Synced Reveal: Host Delay Slider ── */
@@ -1131,9 +1133,9 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--fo
       <div class="rbi-row" id="rbiRow" style="display:none"><span class="rbi-label">+ RBI?</span><button class="rbi-toggle" id="rbiToggle"></button><span class="rbi-label">+40</span></div>
     </div>
     <div class="ptype-row" id="ptypeRow">
-      <button class="ptype-btn" data-pt="Fastball">Fastball</button>
-      <button class="ptype-btn" data-pt="Breaking">Breaking</button>
-      <button class="ptype-btn" data-pt="Offspeed">Offspeed</button>
+      <button class="ptype-btn" data-pt="Fastball">Fastball<span class="ptype-pct" id="ptFbPct"></span></button>
+      <button class="ptype-btn" data-pt="Breaking">Breaking<span class="ptype-pct" id="ptBrPct"></span></button>
+      <button class="ptype-btn" data-pt="Offspeed">Offspeed<span class="ptype-pct" id="ptOsPct"></span></button>
     </div>
   </div>
 
@@ -2036,6 +2038,8 @@ function startGame(gameId,away,home,awayId,homeId){
   // Auto-show scout report
   try{$('scoutBody').classList.add('show')}catch(e){}
   scoutCache={};
+  // Clear pitch type % hints from previous game
+  ['ptFbPct','ptBrPct','ptOsPct'].forEach(id=>{const el=$(id);if(el){el.textContent='';el.className='ptype-pct'}});
   feedBuffer=[];firstFeedApplied=false;mpLastPitchNum=0;mpPendingPitch=null;mpCountdownActive=false;mpResultShowing=false;mpFirstFetch=true;midAtBatLocked=false;soloFirstExtract=true;
   clearTimeout(S.fetchInterval);clearInterval(S.queueInterval);
 
@@ -5461,8 +5465,12 @@ async function loadScoutReport(pitcherId,batterId){
   let html='';
   try{
     if(pitcherId){
-      const r=await fetch('https://statsapi.mlb.com/api/v1/people/'+pitcherId+'/stats?stats=season&season=2025&group=pitching');
-      const d=await r.json();const st=d.stats&&d.stats[0]&&d.stats[0].splits&&d.stats[0].splits[0]&&d.stats[0].splits[0].stat;
+      const [seasRes,arsenalRes]=await Promise.all([
+        fetch('https://statsapi.mlb.com/api/v1/people/'+pitcherId+'/stats?stats=season&season=2025&group=pitching'),
+        fetch('https://statsapi.mlb.com/api/v1/people/'+pitcherId+'/stats?stats=pitchArsenal&season=2025'),
+      ]);
+      const d=seasRes.ok?await seasRes.json():null;
+      const st=d&&d.stats&&d.stats[0]&&d.stats[0].splits&&d.stats[0].splits[0]&&d.stats[0].splits[0].stat;
       if(st){
         html+='<div class="scout-section">Pitcher</div>';
         html+='<div class="scout-row"><span class="sr-label">ERA</span><span class="sr-val">'+(st.era||'--')+'</span></div>';
@@ -5470,6 +5478,32 @@ async function loadScoutReport(pitcherId,batterId){
         html+='<div class="scout-row"><span class="sr-label">WHIP</span><span class="sr-val">'+(st.whip||'--')+'</span></div>';
         const strikes=parseInt(st.strikes||0);const pitches=parseInt(st.numberOfPitches||1);
         html+='<div class="scout-row"><span class="sr-label">Strike%</span><span class="sr-val" style="color:var(--accent)">'+Math.round(strikes/pitches*100)+'%</span></div>';
+      }
+      // Pitch arsenal — categorize into Fastball / Breaking / Offspeed
+      if(arsenalRes.ok){
+        try{
+          const ad=await arsenalRes.json();
+          const splits=(ad.stats&&ad.stats[0]&&ad.stats[0].splits)||[];
+          let fb=0,br=0,os=0;
+          for(const s of splits){
+            const code=(s.stat&&s.stat.type&&s.stat.type.code)||'';
+            const pct=(s.stat&&s.stat.percentage)||0;
+            if(['FF','SI','FC'].includes(code))fb+=pct;
+            else if(['ST','SL','CU','KC','CS','KN'].includes(code))br+=pct;
+            else if(['CH','FS','EP','FO','SC'].includes(code))os+=pct;
+          }
+          if(fb+br+os>0.05){
+            html+='<div class="scout-section">Pitch Mix</div>';
+            if(fb>0.02)html+='<div class="scout-row"><span class="sr-label">⚡ Fastball</span><span class="sr-val" style="color:var(--accent)">'+Math.round(fb*100)+'%</span></div>';
+            if(br>0.02)html+='<div class="scout-row"><span class="sr-label">🌀 Breaking</span><span class="sr-val" style="color:var(--blue)">'+Math.round(br*100)+'%</span></div>';
+            if(os>0.02)html+='<div class="scout-row"><span class="sr-label">🎯 Offspeed</span><span class="sr-val" style="color:var(--accent2)">'+Math.round(os*100)+'%</span></div>';
+            // Update pitch type prediction buttons with real percentages
+            const fbEl=$('ptFbPct');const brEl=$('ptBrPct');const osEl=$('ptOsPct');
+            if(fbEl){fbEl.textContent=fb>0.02?Math.round(fb*100)+'%':'';fbEl.className='ptype-pct'+(fb>0.02?' visible':'')}
+            if(brEl){brEl.textContent=br>0.02?Math.round(br*100)+'%':'';brEl.className='ptype-pct'+(br>0.02?' visible':'')}
+            if(osEl){osEl.textContent=os>0.02?Math.round(os*100)+'%':'';osEl.className='ptype-pct'+(os>0.02?' visible':'')}
+          }
+        }catch(e){}
       }
     }
     if(batterId){
