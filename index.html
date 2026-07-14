@@ -1406,8 +1406,8 @@ auth.onAuthStateChanged(async(user)=>{
     if(checkStressUrlParams()){renderHomeLB();loadGames();return}
     // Try to rejoin an active multiplayer room (page reload)
     const rejoined=await tryRejoinRoom();
-    if(!rejoined){showScreen('screenHome');renderHomeLB();loadGames().then(()=>{renderBets();checkBetResults()});rotateAiTips();renderStreakCal();renderBadges();renderLeagueCard();loadBets()}
-    else{renderHomeLB();loadGames().then(()=>{renderBets();checkBetResults()});rotateAiTips();renderStreakCal();renderBadges();renderLeagueCard();loadBets()}
+    if(!rejoined){showScreen('screenHome');renderHomeLB();loadGames().then(()=>{renderBets();loadBets()});rotateAiTips();renderStreakCal();renderBadges();renderLeagueCard()}
+    else{renderHomeLB();loadGames().then(()=>{renderBets();loadBets()});rotateAiTips();renderStreakCal();renderBadges();renderLeagueCard()}
   }else{
     currentUser=null;userBalance=0;
     showScreen('screenAuth');
@@ -1641,7 +1641,7 @@ function renderSlotGrid(){
   for(let i=0;i<roomPlayerCount;i++){
     const p=players[i];
     if(p){
-      html+=`<div class="slot-item filled"><span class="slot-icon">\u2705</span><span class="slot-name">${p.name}</span></div>`;
+      html+=`<div class="slot-item filled"><span class="slot-icon">\u2705</span><span class="slot-name">${escapeHtml(p.name)}</span></div>`;
     }else{
       html+=`<div class="slot-item"><span class="slot-icon" style="opacity:0.3">\u25CF</span><span class="slot-name">Waiting...</span></div>`;
     }
@@ -1814,9 +1814,9 @@ function renderRoomPlayers(){
     const isMe=id===S.playerId;
     const playerNum='P'+(idx+1);
     if(isMe){
-      return`<div class="rp-item"><span style="font-size:10px;color:var(--blue);font-weight:700;min-width:24px">${playerNum}</span><span class="rp-name" id="myRoomName" style="cursor:pointer;border-bottom:1px dashed #475569" title="Tap to edit">${p.name}</span><span class="rp-badge">YOU</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}<span style="font-size:9px;color:var(--muted);margin-left:auto">&#9998;</span></div>`;
+      return`<div class="rp-item"><span style="font-size:10px;color:var(--blue);font-weight:700;min-width:24px">${playerNum}</span><span class="rp-name" id="myRoomName" style="cursor:pointer;border-bottom:1px dashed #475569" title="Tap to edit">${escapeHtml(p.name)}</span><span class="rp-badge">YOU</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}<span style="font-size:9px;color:var(--muted);margin-left:auto">&#9998;</span></div>`;
     }
-    return`<div class="rp-item"><span style="font-size:10px;color:var(--blue);font-weight:700;min-width:24px">${playerNum}</span><span class="rp-name">${p.name}</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}<span style="font-size:9px;color:${p.online?'#4ade80':'var(--muted)'};margin-left:auto">${p.online?'\u25CF':'\u25CB'}</span></div>`;
+    return`<div class="rp-item"><span style="font-size:10px;color:var(--blue);font-weight:700;min-width:24px">${playerNum}</span><span class="rp-name">${escapeHtml(p.name)}</span>${p.isHost?'<span class="rp-badge">HOST</span>':''}<span style="font-size:9px;color:${p.online?'#4ade80':'var(--muted)'};margin-left:auto">${p.online?'\u25CF':'\u25CB'}</span></div>`;
   }).join('');
   // Make own name editable
   const myName=$('myRoomName');
@@ -1913,7 +1913,7 @@ function renderMPScores(){
       const pausedTag=isOff?'<span style="font-size:9px;background:#334155;color:var(--muted);padding:1px 4px;border-radius:3px;margin-left:3px;font-weight:700">AWAY</span>':'';
       return`<div class="mp-dugout-row${isHot?' hot-seat':''}"${isMe?' style="color:var(--accent2)"':''}${isOff?' style="opacity:0.5"':''}>
         <span class="dg-rank">${isHot?'\uD83D\uDD25':(i+3)+'.'}</span>
-        <span class="dg-name">${p.name}${isMe?' (You)':''}${isHot?'<span class="mp-hot-seat-badge">HOT SEAT</span>':''}${pausedTag}${rally}</span>
+        <span class="dg-name">${escapeHtml(p.name)}${isMe?' (You)':''}${isHot?'<span class="mp-hot-seat-badge">HOT SEAT</span>':''}${pausedTag}${rally}</span>
         <span style="font-size:10px">${streak}</span>
         <span class="dg-score">${p.score||0}</span>
         <span class="dg-ready">${isOff?'\u23F8':(p.ready?'\u2705':'')}</span>
@@ -1950,7 +1950,7 @@ function renderMPScores(){
       const hotBadge=isLast?'<span class="mp-hot-seat-badge">HOT SEAT \uD83D\uDD25</span>':'';
       return`<div class="mp-podium-row ${rank}${isMe?' is-me':''}"${isOff?' style="opacity:0.5"':''}>
         <span class="mp-medal">${medal}</span>
-        <span class="mp-podium-name">${p.name}${hotBadge}${pickTag}</span>
+        <span class="mp-podium-name">${escapeHtml(p.name)}${hotBadge}${pickTag}</span>
         <span class="mp-podium-streak">${streak}</span>
         <span class="mp-podium-score">${p.score||0}</span>
       </div>`;
@@ -1963,9 +1963,9 @@ function renderMPScores(){
       if(p.ready){pickTag=`<span style="font-size:9px;color:#4ade80;margin-left:3px">\u2705</span>`}
       else if(p.lastPick){
         const icon=p.lastGot===true?'\u2705':p.lastGot===false?'\u274C':'';
-        pickTag=`<span style="font-size:9px;color:${p.lastGot?'#4ade80':'#f87171'};margin-left:3px">${icon}${p.lastPick}</span>`;
+        pickTag=`<span style="font-size:9px;color:${p.lastGot?'#4ade80':'#f87171'};margin-left:3px">${icon}${escapeHtml(p.lastPick)}</span>`;
       }
-      return`<div class="mp-row${isMe?' me':''}">${medal}<span class="mp-name">${p.name}${pickTag}</span><span class="mp-pts">${p.score||0}</span></div>`;
+      return`<div class="mp-row${isMe?' me':''}">${medal}<span class="mp-name">${escapeHtml(p.name)}${pickTag}</span><span class="mp-pts">${p.score||0}</span></div>`;
     }).join('');
   }
 
@@ -3436,14 +3436,14 @@ async function renderHomeLB(){
     users.forEach((e,i)=>{
       const m=i===0?'\uD83E\uDD47':i===1?'\uD83E\uDD48':i===2?'\uD83E\uDD49':'';
       const isMe=currentUser&&e.uid===currentUser.uid;
-      h+='<div class="lb-row"'+(isMe?' style="color:var(--accent2);font-weight:700"':'')+'><span class="rank">'+(m||(i+1)+'.')+'</span><span class="name">'+e.name+(isMe?' (You)':'')+'</span><span class="pts">'+e.score.toLocaleString()+'</span></div>';
+      h+='<div class="lb-row"'+(isMe?' style="color:var(--accent2);font-weight:700"':'')+'><span class="rank">'+(m||(i+1)+'.')+'</span><span class="name">'+escapeHtml(e.name)+(isMe?' (You)':'')+'</span><span class="pts">'+e.score.toLocaleString()+'</span></div>';
     });
     el.innerHTML=h;
   }catch(e){
     // Fallback to local
     el.innerHTML='<h3>\uD83C\uDFC6 Leaderboard</h3>';
     if(!S.leaderboard.length){el.innerHTML+='<div style="color:#64748b;font-size:13px">Play a game to get on the board!</div>';return}
-    S.leaderboard.slice(0,5).forEach((e,i)=>{const m=i===0?'\uD83E\uDD47':i===1?'\uD83E\uDD48':i===2?'\uD83E\uDD49':'';el.innerHTML+='<div class="lb-row"><span class="rank">'+(m||(i+1)+'.')+'</span><span class="name">'+e.n+'</span><span class="pts">'+e.s+'</span></div>'});
+    S.leaderboard.slice(0,5).forEach((e,i)=>{const m=i===0?'\uD83E\uDD47':i===1?'\uD83E\uDD48':i===2?'\uD83E\uDD49':'';el.innerHTML+='<div class="lb-row"><span class="rank">'+(m||(i+1)+'.')+'</span><span class="name">'+escapeHtml(e.n)+'</span><span class="pts">'+e.s+'</span></div>'});
   }
 }
 function ordinal(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0])}
@@ -4278,14 +4278,14 @@ function renderGameLB(){
     el.innerHTML=sorted.map((p,i)=>{
       const medal=i===0?'\uD83E\uDD47':i===1?'\uD83E\uDD48':i===2?'\uD83E\uDD49':'';
       const isMe=p.id===S.playerId;
-      return`<div class="glb-row"${isMe?' style="color:var(--accent2)"':''}><span class="glb-rank">${medal||(i+1)+'.'}</span><span class="glb-name">${p.name}${isMe?' (You)':''}</span><span class="glb-pts">${p.score||0}</span></div>`;
+      return`<div class="glb-row"${isMe?' style="color:var(--accent2)"':''}><span class="glb-rank">${medal||(i+1)+'.'}</span><span class="glb-name">${escapeHtml(p.name)}${isMe?' (You)':''}</span><span class="glb-pts">${p.score||0}</span></div>`;
     }).join('');
   }else{
     const you=S.userScore,cpu=S.cpuScore;
     const rows=[{n:S.playerName||'You',s:you,me:true},{n:'CPU',s:cpu,me:false}].sort((a,b)=>b.s-a.s);
     el.innerHTML=rows.map((r,i)=>{
       const medal=i===0?'\uD83E\uDD47':'\uD83E\uDD48';
-      return`<div class="glb-row"${r.me?' style="color:var(--accent2)"':''}><span class="glb-rank">${medal}</span><span class="glb-name">${r.n}</span><span class="glb-pts">${r.s}</span></div>`;
+      return`<div class="glb-row"${r.me?' style="color:var(--accent2)"':''}><span class="glb-rank">${medal}</span><span class="glb-name">${escapeHtml(r.n)}</span><span class="glb-pts">${r.s}</span></div>`;
     }).join('');
   }
 }
@@ -4391,7 +4391,7 @@ function setupChatListener(){
     const isMe=msg.pid===S.playerId;
     const el=document.createElement('div');
     el.className='mp-chat-msg'+(isMe?' me':'');
-    el.innerHTML=`<span class="cm-name">${msg.name}:</span>${escapeHtml(msg.text)}`;
+    el.innerHTML=`<span class="cm-name">${escapeHtml(msg.name||'')}:</span>${escapeHtml(msg.text)}`;
     $('chatMsgs').appendChild(el);
     $('chatMsgs').scrollTop=$('chatMsgs').scrollHeight;
     // Unread badge
@@ -4400,7 +4400,7 @@ function setupChatListener(){
 }
 function showChatButton(){$('chatToggle').classList.add('show');setupChatListener()}
 function hideChatButton(){$('chatToggle').classList.remove('show');$('chatPanel').classList.remove('show');chatOpen=false;chatListenerActive=false}
-function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function escapeHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 
 // Enter key to send
 document.addEventListener('keydown',e=>{
@@ -5259,7 +5259,7 @@ function checkAchievements(){
       data.unlocked.push(badge.id);
       newUnlock=true;
       // Show notification
-      addSocialPulse('\uD83C\uDFC6','<span class="ds-pulse-user">'+S.playerName+'</span> unlocked: '+badge.icon+' '+badge.name,'ds-pulse-hot');
+      addSocialPulse('\uD83C\uDFC6','<span class="ds-pulse-user">'+escapeHtml(S.playerName)+'</span> unlocked: '+badge.icon+' '+escapeHtml(badge.name),'ds-pulse-hot');
     }
   }
   if(newUnlock)saveAchievementData(data);
@@ -5398,8 +5398,8 @@ function renderLeagueCard(){
     const d=snap.val();if(!d){el.innerHTML='<div style="color:var(--muted);font-size:10px">League not found</div>';return}
     const members=d.members?Object.entries(d.members).map(([id,m])=>({...m,id})).sort((a,b)=>(b.totalScore||0)-(a.totalScore||0)):[];
     const medals=['\uD83E\uDD47','\uD83E\uDD48','\uD83E\uDD49'];
-    el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:12px;font-weight:700">'+d.name+'</span><span class="lg-code">'+myLeagueCode+'</span></div>'+
-      members.slice(0,5).map((m,i)=>'<div class="lg-row'+(m.id===S.playerId?' lg-me':'')+'"><span class="lg-rank">'+(medals[i]||(i+1)+'.')+'</span><span class="lg-name">'+m.name+(m.id===S.playerId?' (You)':'')+'</span><span class="lg-pts">'+(m.totalScore||0)+'</span></div>').join('')+
+    el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:12px;font-weight:700">'+escapeHtml(d.name)+'</span><span class="lg-code">'+escapeHtml(myLeagueCode)+'</span></div>'+
+      members.slice(0,5).map((m,i)=>'<div class="lg-row'+(m.id===S.playerId?' lg-me':'')+'"><span class="lg-rank">'+(medals[i]||(i+1)+'.')+'</span><span class="lg-name">'+escapeHtml(m.name)+(m.id===S.playerId?' (You)':'')+'</span><span class="lg-pts">'+(m.totalScore||0)+'</span></div>').join('')+
       '<div class="lg-actions" style="margin-top:6px"><button class="lg-join" onclick="navigator.clipboard.writeText(\''+myLeagueCode+'\');this.textContent=\'Copied!\';setTimeout(()=>this.textContent=\'Share Code\',1500)">Share Code</button><button style="background:var(--card2);color:var(--red);border:none;border-radius:8px;padding:8px;font-size:9px;font-weight:700;cursor:pointer" onclick="setMyLeague(null);renderLeagueCard()">Leave</button></div>';
   });
 }
@@ -5410,30 +5410,41 @@ function renderLeagueCard(){
 activeBets={};
 function loadBets(){
   if(!currentUser)return;
-  db.ref('bets/'+currentUser.uid).once('value',snap=>{activeBets=snap.val()||{};renderBets()});
+  // Re-hydrate in-flight bets from Firebase, then settle any that finished while the page was closed.
+  db.ref('bets/'+currentUser.uid).once('value',snap=>{activeBets=snap.val()||{};renderBets();checkBetResults()});
 }
 function placeBet(gameId,team,amount,awayName,homeName){
-  if(!currentUser||userBalance<amount){alert('Not enough points!');return}
+  if(!currentUser)return;
+  // Guard: amount must be a positive whole number and affordable. Never allow a negative balance.
+  amount=Number(amount);
+  if(!Number.isFinite(amount)||!Number.isInteger(amount)||amount<=0){alert('Invalid bet amount.');return}
+  if(activeBets[gameId]){alert('You already have a bet on this game.');return}
+  if(amount>userBalance){alert('Not enough points!');return}
   userBalance-=amount;
+  if(userBalance<0)userBalance=0; // hard floor \u2014 never persist a negative balance
   db.ref('users/'+currentUser.uid).update({balance:userBalance});
   $('balVal').textContent=userBalance.toLocaleString();
-  activeBets[gameId]={team,amount,awayName,homeName,placed:Date.now()};
+  activeBets[gameId]={team,amount,awayName,homeName,placed:Date.now(),settled:false};
   db.ref('bets/'+currentUser.uid+'/'+gameId).set(activeBets[gameId]);
   renderBets();
-  addSocialPulse('\uD83C\uDFB0','<span class="ds-pulse-user">'+S.playerName+'</span> bet '+amount+' pts on '+team,'ds-pulse-hot');
+  addSocialPulse('\uD83C\uDFB0','<span class="ds-pulse-user">'+escapeHtml(S.playerName)+'</span> bet '+amount+' pts on '+escapeHtml(team),'ds-pulse-hot');
 }
 function checkBetResults(){
   if(!currentUser||!cachedGames)return;
   Object.entries(activeBets).forEach(([gId,bet])=>{
+    if(!bet||bet.settled)return; // idempotency: never settle/pay the same bet twice
     const game=cachedGames.find(g=>String(g.gamePk)===String(gId));
     if(!game||game.status.abstractGameState!=='Final')return;
+    // Lock the bet as settled FIRST (local + Firebase) so a repeat call can't double-credit.
+    bet.settled=true;
+    db.ref('bets/'+currentUser.uid+'/'+gId+'/settled').set(true);
     const awayWon=(game.teams.away.score||0)>(game.teams.home.score||0);
     const winner=awayWon?game.teams.away.team.name:game.teams.home.team.name;
     if(bet.team===winner){
       const payout=bet.amount*2;userBalance+=payout;
       db.ref('users/'+currentUser.uid).update({balance:userBalance});
       $('balVal').textContent=userBalance.toLocaleString();
-      addSocialPulse('\uD83C\uDFC6','<span class="ds-pulse-user">'+S.playerName+'</span> won '+payout+' pts on '+bet.team+'!','ds-pulse-score');
+      addSocialPulse('\uD83C\uDFC6','<span class="ds-pulse-user">'+escapeHtml(S.playerName)+'</span> won '+payout+' pts on '+escapeHtml(bet.team)+'!','ds-pulse-score');
     }
     delete activeBets[gId];db.ref('bets/'+currentUser.uid+'/'+gId).remove();
   });
@@ -5584,7 +5595,7 @@ function updateDesktopSidebars(){
   if(lb.length&&lbEl){
     lbEl.innerHTML=lb.slice(0,8).map((e,i)=>{
       const medal=i===0?'\uD83E\uDD47':i===1?'\uD83E\uDD48':i===2?'\uD83E\uDD49':(i+1)+'.';
-      return`<div class="ds-stat-row"><span class="ds-label">${medal} ${e.name||'Player'}</span><span class="ds-val">${e.score||0}</span></div>`;
+      return`<div class="ds-stat-row"><span class="ds-label">${medal} ${escapeHtml(e.name||'Player')}</span><span class="ds-val">${e.score||0}</span></div>`;
     }).join('');
   }
 }
@@ -5682,7 +5693,7 @@ function populateBotData(){
     const medals=['\uD83E\uDD47','\uD83E\uDD48','\uD83E\uDD49'];
     lbEl.innerHTML=all.map((e,i)=>{
       const isMe=currentUser&&e.uid===currentUser.uid;
-      return'<div class="ds-stat-row"'+(isMe?' style="color:var(--accent2)"':'')+'><span class="ds-label">'+(medals[i]||(i+1)+'.')+' '+e.name+'</span><span class="ds-val">'+(e.score||0)+'</span></div>';
+      return'<div class="ds-stat-row"'+(isMe?' style="color:var(--accent2)"':'')+'><span class="ds-label">'+(medals[i]||(i+1)+'.')+' '+escapeHtml(e.name)+'</span><span class="ds-val">'+(e.score||0)+'</span></div>';
     }).join('');
   }
 
@@ -5752,7 +5763,7 @@ function renderFriends(){
   el.innerHTML=friends.sort((a,b)=>b.lastPlayed-a.lastPlayed).slice(0,6).map(f=>{
     const record=f.wins+'W-'+f.losses+'L';
     const pct=f.games?Math.round(f.wins/f.games*100):0;
-    return'<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03)"><span style="font-weight:700">'+f.name+'</span><span style="color:var(--muted);font-size:9px">'+record+' ('+pct+'%)</span></div>';
+    return'<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03)"><span style="font-weight:700">'+escapeHtml(f.name)+'</span><span style="color:var(--muted);font-size:9px">'+record+' ('+pct+'%)</span></div>';
   }).join('');
 }
 renderFriends();
